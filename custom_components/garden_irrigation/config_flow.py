@@ -1,4 +1,9 @@
-"""Config, options and zone-subentry flows for Garden Irrigation."""
+"""Config, options and zone-subentry flows for Garden Irrigation.
+
+Each config entry is one *setup* (e.g. "Garden", "Trees"). Multiple setups are
+allowed. A setup is either ``sequential`` (single start time, zones run in order)
+or ``specific`` (each zone has its own schedules).
+"""
 
 from __future__ import annotations
 
@@ -25,13 +30,17 @@ from .const import (
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
     CONF_SCHEDULES,
+    CONF_START_TIME,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
     DEFAULT_DURATION,
     DEFAULT_MODE,
+    DEFAULT_START_TIME,
     DOMAIN,
     MAX_DURATION,
     MIN_DURATION,
+    MODE_SEQUENTIAL,
+    MODE_SPECIFIC,
     MODES,
     SUBENTRY_TYPE_ZONE,
     WEEKDAYS,
@@ -87,31 +96,76 @@ def _settings_schema() -> vol.Schema:
     )
 
 
+def _sequential_schema(defaults: dict[str, Any]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_START_TIME, default=defaults.get(CONF_START_TIME, DEFAULT_START_TIME)
+            ): selector.TimeSelector(),
+            vol.Required(
+                CONF_DAYS, default=defaults.get(CONF_DAYS, list(WEEKDAYS))
+            ): DAYS_SELECTOR,
+        }
+    )
+
+
 class GardenIrrigationConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle the initial setup of the integration."""
+    """Create irrigation setups (multiple allowed)."""
 
     VERSION = 1
+
+    def __init__(self) -> None:
+        self._setup: dict[str, Any] = {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Create the single hub entry."""
-        await self.async_set_unique_id(DOMAIN)
-        self._abort_if_unique_id_configured()
-
+        """Step 1: name + scheduling mode."""
         if user_input is not None:
-            return self.async_create_entry(
-                title="Garden Irrigation",
-                data={},
-                options={CONF_MODE: user_input[CONF_MODE]},
-            )
+            self._setup = dict(user_input)
+            if user_input[CONF_MODE] == MODE_SEQUENTIAL:
+                return await self.async_step_sequential()
+            return self._create()
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
-                {vol.Required(CONF_MODE, default=DEFAULT_MODE): MODE_SELECTOR}
+                {
+                    vol.Required(CONF_NAME, default="Garden"): selector.TextSelector(),
+                    vol.Required(CONF_MODE, default=DEFAULT_MODE): MODE_SELECTOR,
+                }
             ),
         )
+
+    async def async_step_sequential(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step 2 (sequential only): start time + days."""
+        if user_input is not None:
+            self._setup.update(user_input)
+            return self._create()
+
+        return self.async_show_form(
+            step_id="sequential", data_schema=_sequential_schema({})
+        )
+
+    async def async_step_import(
+        self, import_data: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Create a setup programmatically (used by the card)."""
+        self._setup = dict(import_data)
+        return self._create()
+
+    @callback
+    def _create(self) -> ConfigFlowResult:
+        name = self._setup.get(CONF_NAME, "Garden")
+        options: dict[str, Any] = {CONF_MODE: self._setup.get(CONF_MODE, DEFAULT_MODE)}
+        if options[CONF_MODE] == MODE_SEQUENTIAL:
+            options[CONF_START_TIME] = self._setup.get(
+                CONF_START_TIME, DEFAULT_START_TIME
+            )
+            options[CONF_DAYS] = self._setup.get(CONF_DAYS, list(WEEKDAYS))
+        return self.async_create_entry(title=name, data={}, options=options)
 
     @staticmethod
     @callback
@@ -127,30 +181,47 @@ class GardenIrrigationConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(OptionsFlow):
-    """Allow switching the watering mode after setup."""
+    """Edit a setup's scheduling mode and (for sequential) start time/days."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        options = self.config_entry.options
         if user_input is not None:
-            return self.async_create_entry(data={CONF_MODE: user_input[CONF_MODE]})
+            new_options: dict[str, Any] = {CONF_MODE: user_input[CONF_MODE]}
+            if user_input[CONF_MODE] == MODE_SEQUENTIAL:
+                new_options[CONF_START_TIME] = user_input.get(
+                    CONF_START_TIME, DEFAULT_START_TIME
+                )
+                new_options[CONF_DAYS] = user_input.get(CONF_DAYS, list(WEEKDAYS))
+            return self.async_create_entry(data=new_options)
 
-        current = self.config_entry.options.get(CONF_MODE, DEFAULT_MODE)
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {vol.Required(CONF_MODE, default=current): MODE_SELECTOR}
-            ),
-        )
+        schema = {
+            vol.Required(
+                CONF_MODE, default=options.get(CONF_MODE, DEFAULT_MODE)
+            ): MODE_SELECTOR,
+            vol.Optional(
+                CONF_START_TIME,
+                default=options.get(CONF_START_TIME, DEFAULT_START_TIME),
+            ): selector.TimeSelector(),
+            vol.Optional(
+                CONF_DAYS, default=options.get(CONF_DAYS, list(WEEKDAYS))
+            ): DAYS_SELECTOR,
+        }
+        return self.async_show_form(step_id="init", data_schema=vol.Schema(schema))
 
 
 class ZoneSubentryFlowHandler(ConfigSubentryFlow):
-    """Add or reconfigure a single irrigation zone, including its schedules."""
+    """Add or reconfigure a zone. Schedules apply only in 'specific' mode."""
 
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
         self._schedules: list[dict[str, Any]] = []
         self._is_new = True
+
+    @property
+    def _is_specific(self) -> bool:
+        return self._get_entry().options.get(CONF_MODE, DEFAULT_MODE) == MODE_SPECIFIC
 
     # ----- entry points ----------------------------------------------------------
 
@@ -169,7 +240,9 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
         subentry = self._get_reconfigure_subentry()
         self._data = {k: v for k, v in subentry.data.items() if k != CONF_SCHEDULES}
         self._schedules = [dict(s) for s in subentry.data.get(CONF_SCHEDULES, [])]
-        return await self.async_step_menu()
+        if self._is_specific:
+            return await self.async_step_menu()
+        return await self.async_step_settings()
 
     # ----- steps -----------------------------------------------------------------
 
@@ -178,7 +251,9 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
     ) -> SubentryFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            return await self.async_step_menu()
+            if self._is_specific:
+                return await self.async_step_menu()
+            return await self.async_step_finish()
 
         return self.async_show_form(
             step_id="settings",
@@ -262,7 +337,9 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
     async def async_step_finish(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        data = {**self._data, CONF_SCHEDULES: self._schedules}
+        data = {**self._data}
+        if self._is_specific:
+            data[CONF_SCHEDULES] = self._schedules
         title = data[CONF_NAME]
 
         if self._is_new:
@@ -292,7 +369,7 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
         return "\n".join(lines)
 
     def _warning(self) -> str:
-        """Return a discreet overlap warning, comparing this zone against the others."""
+        """Discreet overlap warning comparing this zone against the others."""
         if not self._schedules:
             return ""
 

@@ -1,8 +1,8 @@
 """Websocket commands backing the Garden Irrigation Lovelace card.
 
-These expose zone/schedule CRUD so the custom card can manage the same config
-subentries that the config-flow UI manages. All mutations require an admin user
-and trigger a reload of the config entry via the update listener.
+Exposes setup (config entry) and zone/schedule (subentry) CRUD so the card can
+manage everything the config-flow UI manages. All mutations require an admin user
+and trigger a reload of the affected config entry.
 """
 
 from __future__ import annotations
@@ -20,18 +20,21 @@ from homeassistant.helpers import entity_registry as er
 from .const import (
     CONF_DAYS,
     CONF_DURATION,
+    CONF_MODE,
     CONF_NAME,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
     CONF_SCHEDULES,
+    CONF_START_TIME,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
     DEFAULT_DURATION,
     DEFAULT_MODE,
+    DEFAULT_START_TIME,
     DOMAIN,
     MAX_DURATION,
     MIN_DURATION,
-    CONF_MODE,
+    MODES,
     SUBENTRY_TYPE_ZONE,
     WEEKDAYS,
 )
@@ -42,29 +45,38 @@ TIME_RE = vol.Match(r"^([01]?\d|2[0-3]):[0-5]\d")
 @callback
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register all websocket commands (called once from async_setup)."""
-    websocket_api.async_register_command(hass, ws_get)
-    websocket_api.async_register_command(hass, ws_add_zone)
-    websocket_api.async_register_command(hass, ws_update_zone)
-    websocket_api.async_register_command(hass, ws_delete_zone)
-    websocket_api.async_register_command(hass, ws_add_schedule)
-    websocket_api.async_register_command(hass, ws_remove_schedule)
+    for command in (
+        ws_get,
+        ws_add_setup,
+        ws_update_setup,
+        ws_delete_setup,
+        ws_run_setup,
+        ws_stop_setup,
+        ws_add_zone,
+        ws_update_zone,
+        ws_delete_zone,
+        ws_add_schedule,
+        ws_remove_schedule,
+    ):
+        websocket_api.async_register_command(hass, command)
 
 
 @callback
-def _get_entry(hass: HomeAssistant) -> ConfigEntry | None:
-    """Return the (single) Garden Irrigation config entry, loaded or not."""
-    entries = hass.config_entries.async_entries(DOMAIN)
-    return entries[0] if entries else None
+def _entry(hass: HomeAssistant, entry_id: str) -> ConfigEntry | None:
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry and entry.domain == DOMAIN:
+        return entry
+    return None
 
 
 @callback
 def _zone_payload(
-    hass: HomeAssistant, subentry_id: str, data: dict[str, Any]
+    hass: HomeAssistant, entry_id: str, subentry_id: str, data: dict[str, Any]
 ) -> dict[str, Any]:
-    """Build the JSON payload describing one zone for the card."""
     ent_reg = er.async_get(hass)
     return {
         "zone_id": subentry_id,
+        "entry_id": entry_id,
         "name": data.get(CONF_NAME),
         "switch_entity": data.get(CONF_SWITCH_ENTITY),
         "duration": int(data.get(CONF_DURATION, DEFAULT_DURATION)),
@@ -78,6 +90,24 @@ def _zone_payload(
     }
 
 
+@callback
+def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
+    options = entry.options
+    zones = [
+        _zone_payload(hass, entry.entry_id, sid, dict(sub.data))
+        for sid, sub in entry.subentries.items()
+        if sub.subentry_type == SUBENTRY_TYPE_ZONE
+    ]
+    return {
+        "entry_id": entry.entry_id,
+        "name": entry.title,
+        "mode": options.get(CONF_MODE, DEFAULT_MODE),
+        "start_time": options.get(CONF_START_TIME, DEFAULT_START_TIME),
+        "days": options.get(CONF_DAYS, list(WEEKDAYS)),
+        "zones": zones,
+    }
+
+
 @websocket_api.websocket_command({vol.Required("type"): "garden_irrigation/get"})
 @callback
 def ws_get(
@@ -85,32 +115,159 @@ def ws_get(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Return the integration config (mode + zones) for the card."""
-    entry = _get_entry(hass)
-    if entry is None:
-        connection.send_result(msg["id"], {"configured": False, "zones": []})
-        return
-
-    zones = [
-        _zone_payload(hass, sid, dict(sub.data))
-        for sid, sub in entry.subentries.items()
-        if sub.subentry_type == SUBENTRY_TYPE_ZONE
+    """Return all setups (with their zones) for the card."""
+    setups = [
+        _setup_payload(hass, entry)
+        for entry in hass.config_entries.async_entries(DOMAIN)
     ]
-    connection.send_result(
-        msg["id"],
-        {
-            "configured": True,
-            "entry_id": entry.entry_id,
-            "mode": entry.options.get(CONF_MODE, DEFAULT_MODE),
-            "zones": zones,
+    connection.send_result(msg["id"], {"setups": setups})
+
+
+# ----- setup (config entry) commands --------------------------------------------
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/setup/add",
+        vol.Required("name"): vol.All(str, vol.Length(min=1)),
+        vol.Optional("mode", default=DEFAULT_MODE): vol.In(MODES),
+        vol.Optional("start_time", default=DEFAULT_START_TIME): TIME_RE,
+        vol.Optional("days", default=list(WEEKDAYS)): [vol.In(WEEKDAYS)],
+    }
+)
+@websocket_api.async_response
+async def ws_add_setup(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Create a new setup (config entry) via the import flow."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "import"},
+        data={
+            CONF_NAME: msg["name"],
+            CONF_MODE: msg["mode"],
+            CONF_START_TIME: msg["start_time"][:5],
+            CONF_DAYS: msg["days"],
         },
+    )
+    entry = result.get("result")
+    connection.send_result(
+        msg["id"], {"entry_id": entry.entry_id if entry else None}
     )
 
 
 @websocket_api.require_admin
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "garden_irrigation/setup/update",
+        vol.Required("entry_id"): str,
+        vol.Optional("name"): vol.All(str, vol.Length(min=1)),
+        vol.Optional("mode"): vol.In(MODES),
+        vol.Optional("start_time"): TIME_RE,
+        vol.Optional("days"): [vol.In(WEEKDAYS)],
+    }
+)
+@callback
+def ws_update_setup(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Update a setup's name and/or scheduling options."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown setup")
+        return
+
+    options = dict(entry.options)
+    if "mode" in msg:
+        options[CONF_MODE] = msg["mode"]
+    if "start_time" in msg:
+        options[CONF_START_TIME] = msg["start_time"][:5]
+    if "days" in msg:
+        options[CONF_DAYS] = msg["days"]
+
+    title = msg.get("name", entry.title)
+    hass.config_entries.async_update_entry(entry, title=title, options=options)
+    connection.send_result(msg["id"], _setup_payload(hass, entry))
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/setup/delete",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_delete_setup(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Delete a whole setup (config entry)."""
+    if _entry(hass, msg["entry_id"]) is None:
+        connection.send_error(msg["id"], "not_found", "Unknown setup")
+        return
+    await hass.config_entries.async_remove(msg["entry_id"])
+    connection.send_result(msg["id"], {"entry_id": msg["entry_id"]})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/setup/run",
+        vol.Required("entry_id"): str,
+    }
+)
+@callback
+def ws_run_setup(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Start a sequential setup's chain now."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None or not hasattr(entry, "runtime_data") or entry.runtime_data is None:
+        connection.send_error(msg["id"], "not_found", "Setup not ready")
+        return
+    entry.runtime_data.async_run_chain()
+    connection.send_result(msg["id"], {})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/setup/stop",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_stop_setup(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Stop everything in a setup."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None or getattr(entry, "runtime_data", None) is None:
+        connection.send_error(msg["id"], "not_found", "Setup not ready")
+        return
+    await entry.runtime_data.async_stop_all()
+    connection.send_result(msg["id"], {})
+
+
+# ----- zone (subentry) commands -------------------------------------------------
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "garden_irrigation/zone/add",
+        vol.Required("entry_id"): str,
         vol.Required("name"): vol.All(str, vol.Length(min=1)),
         vol.Required("switch_entity"): str,
         vol.Optional("duration", default=DEFAULT_DURATION): vol.All(
@@ -126,10 +283,10 @@ def ws_add_zone(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Create a new zone subentry."""
-    entry = _get_entry(hass)
+    """Create a new zone subentry in a setup."""
+    entry = _entry(hass, msg["entry_id"])
     if entry is None:
-        connection.send_error(msg["id"], "not_configured", "Integration not set up")
+        connection.send_error(msg["id"], "not_found", "Unknown setup")
         return
 
     data: dict[str, Any] = {
@@ -151,7 +308,7 @@ def ws_add_zone(
     )
     hass.config_entries.async_add_subentry(entry, subentry)
     connection.send_result(
-        msg["id"], _zone_payload(hass, subentry.subentry_id, data)
+        msg["id"], _zone_payload(hass, entry.entry_id, subentry.subentry_id, data)
     )
 
 
@@ -159,6 +316,7 @@ def ws_add_zone(
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "garden_irrigation/zone/update",
+        vol.Required("entry_id"): str,
         vol.Required("zone_id"): str,
         vol.Optional("name"): vol.All(str, vol.Length(min=1)),
         vol.Optional("switch_entity"): str,
@@ -175,8 +333,8 @@ def ws_update_zone(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Update fields on an existing zone subentry."""
-    entry = _get_entry(hass)
+    """Update fields on a zone subentry."""
+    entry = _entry(hass, msg["entry_id"])
     subentry = entry.subentries.get(msg["zone_id"]) if entry else None
     if entry is None or subentry is None:
         connection.send_error(msg["id"], "not_found", "Unknown zone")
@@ -199,13 +357,16 @@ def ws_update_zone(
     hass.config_entries.async_update_subentry(
         entry, subentry, data=data, title=data.get(CONF_NAME, subentry.title)
     )
-    connection.send_result(msg["id"], _zone_payload(hass, msg["zone_id"], data))
+    connection.send_result(
+        msg["id"], _zone_payload(hass, entry.entry_id, msg["zone_id"], data)
+    )
 
 
 @websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "garden_irrigation/zone/delete",
+        vol.Required("entry_id"): str,
         vol.Required("zone_id"): str,
     }
 )
@@ -216,11 +377,10 @@ def ws_delete_zone(
     msg: dict[str, Any],
 ) -> None:
     """Delete a zone subentry."""
-    entry = _get_entry(hass)
+    entry = _entry(hass, msg["entry_id"])
     if entry is None or msg["zone_id"] not in entry.subentries:
         connection.send_error(msg["id"], "not_found", "Unknown zone")
         return
-
     hass.config_entries.async_remove_subentry(entry, msg["zone_id"])
     connection.send_result(msg["id"], {"zone_id": msg["zone_id"]})
 
@@ -229,6 +389,7 @@ def ws_delete_zone(
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "garden_irrigation/schedule/add",
+        vol.Required("entry_id"): str,
         vol.Required("zone_id"): str,
         vol.Required("time"): TIME_RE,
         vol.Optional("days", default=list(WEEKDAYS)): [vol.In(WEEKDAYS)],
@@ -241,7 +402,7 @@ def ws_add_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Append a schedule to a zone."""
-    entry = _get_entry(hass)
+    entry = _entry(hass, msg["entry_id"])
     subentry = entry.subentries.get(msg["zone_id"]) if entry else None
     if entry is None or subentry is None:
         connection.send_error(msg["id"], "not_found", "Unknown zone")
@@ -253,15 +414,17 @@ def ws_add_schedule(
         {CONF_TIME: msg["time"][:5], CONF_DAYS: msg["days"] or list(WEEKDAYS)}
     )
     data[CONF_SCHEDULES] = schedules
-
     hass.config_entries.async_update_subentry(entry, subentry, data=data)
-    connection.send_result(msg["id"], _zone_payload(hass, msg["zone_id"], data))
+    connection.send_result(
+        msg["id"], _zone_payload(hass, entry.entry_id, msg["zone_id"], data)
+    )
 
 
 @websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "garden_irrigation/schedule/remove",
+        vol.Required("entry_id"): str,
         vol.Required("zone_id"): str,
         vol.Required("index"): vol.All(vol.Coerce(int), vol.Range(min=0)),
     }
@@ -273,7 +436,7 @@ def ws_remove_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Remove a schedule from a zone by index."""
-    entry = _get_entry(hass)
+    entry = _entry(hass, msg["entry_id"])
     subentry = entry.subentries.get(msg["zone_id"]) if entry else None
     if entry is None or subentry is None:
         connection.send_error(msg["id"], "not_found", "Unknown zone")
@@ -285,6 +448,7 @@ def ws_remove_schedule(
     if 0 <= index < len(schedules):
         del schedules[index]
     data[CONF_SCHEDULES] = schedules
-
     hass.config_entries.async_update_subentry(entry, subentry, data=data)
-    connection.send_result(msg["id"], _zone_payload(hass, msg["zone_id"], data))
+    connection.send_result(
+        msg["id"], _zone_payload(hass, entry.entry_id, msg["zone_id"], data)
+    )

@@ -90,7 +90,7 @@ class ZoneSwitch(SwitchEntity):
         next_run = self._controller.next_run(self._zone_id)
         attrs: dict[str, Any] = {
             "mode": self._controller.mode,
-            "queued": self._controller.is_queued(self._zone_id),
+            "chain_running": self._controller.chain_running(),
         }
         if zone is not None:
             attrs["duration_minutes"] = zone.duration

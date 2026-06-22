@@ -2,29 +2,35 @@
   "config": {
     "step": {
       "user": {
-        "title": "Garden Irrigation",
-        "description": "Set up garden irrigation. After setup, add a zone for each switch/relay you want to control.",
+        "title": "Add irrigation setup",
+        "description": "Create an irrigation setup (e.g. “Garden” or “Trees”). You can add more setups later.",
         "data": {
-          "mode": "Watering mode"
+          "name": "Setup name",
+          "mode": "Scheduling mode"
         },
         "data_description": {
-          "mode": "Sequential runs one zone at a time (others queue). Parallel lets zones run simultaneously."
+          "mode": "Sequential: one start time, zones run back-to-back in order. Specific times: each zone has its own schedules (they may overlap)."
+        }
+      },
+      "sequential": {
+        "title": "Sequential start",
+        "description": "Pick when this setup starts and on which days. Zones run one after another in order.",
+        "data": {
+          "start_time": "Start time",
+          "days": "Days"
         }
       }
-    },
-    "abort": {
-      "already_configured": "Garden Irrigation is already set up."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Garden Irrigation options",
+        "title": "Setup options",
+        "description": "Choose the scheduling mode. Start time and days apply only to sequential setups.",
         "data": {
-          "mode": "Watering mode"
-        },
-        "data_description": {
-          "mode": "Sequential runs one zone at a time (others queue). Parallel lets zones run simultaneously."
+          "mode": "Scheduling mode",
+          "start_time": "Start time (sequential)",
+          "days": "Days (sequential)"
         }
       }
     }
@@ -89,15 +95,15 @@
   "selector": {
     "mode": {
       "options": {
-        "sequential": "Sequential (one zone at a time)",
-        "parallel": "Parallel (zones run together)"
+        "sequential": "Sequential (one start time, zones in order)",
+        "specific": "Specific times (per-zone schedules)"
       }
     }
   },
   "issues": {
     "schedule_overlap": {
       "title": "Overlapping irrigation schedules",
-      "description": "Some zones are scheduled to water at overlapping times. In sequential mode they will queue; in parallel mode they run together (which may reduce water pressure):\n\n{overlaps}"
+      "description": "In the “{setup}” setup, some zones are scheduled to water at overlapping times (they will run together):\n\n{overlaps}"
     }
   },
   "entity": {
@@ -124,7 +130,7 @@
     },
     "stop_all": {
       "name": "Stop all zones",
-      "description": "Immediately stop every running zone and clear the queue."
+      "description": "Immediately stop every running zone in every setup."
     }
   }
 }

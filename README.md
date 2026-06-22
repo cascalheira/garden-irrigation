@@ -6,23 +6,28 @@ and services — no YAML required.
 
 ## Features
 
+- **Multiple setups** — create as many independent setups as you like (e.g.
+  "Garden" and "Trees"). Each setup is a config entry with its own zones and
+  scheduling mode.
+- **Two scheduling modes per setup:**
+  - **Sequential** — one start time + days for the setup; zones run back-to-back
+    in order (one cancellable chain).
+  - **Specific times** — each zone has its own schedules (multiple times/days);
+    zones may overlap.
 - **Multiple zones**, each mapped to a `switch` (or `input_boolean`) and a run
   duration of **1–60 minutes**.
-- **Schedules in the UI** — add as many start times per zone as you like, each with
-  its own days of the week.
-- **Two watering modes:**
-  - **Sequential** — one zone at a time; concurrent requests queue automatically.
-  - **Parallel** — zones may run simultaneously.
-- **Discreet overlap warning** — when schedules overlap you get a non-blocking
-  warning while editing *and* a Home Assistant repair issue.
+- **Discreet overlap warning** — in *specific* mode, overlapping schedules raise a
+  non-blocking warning while editing *and* a Home Assistant repair issue.
 - **Manual activation** — every zone is a switch entity you can toggle from any
   dashboard, plus `garden_irrigation.start` (with optional duration override).
 - **Stop in progress** — turn the zone switch off, call `garden_irrigation.stop`,
-  or `garden_irrigation.stop_all`. Works for scheduled and manual runs alike.
+  or `garden_irrigation.stop_all`. Stopping a chained zone stops the whole chain.
 - **Pre / post scripts** — run and await a `script` entity before the valve opens
   and after it closes (open main supply, send a notification, etc.).
 - A **Time remaining** sensor per zone, with `next_run` and run metadata exposed as
   attributes.
+- A **dashboard card** with view/edit modes that manages setups, zones and
+  schedules (24-hour time pickers).
 
 ## Installation
 
@@ -55,18 +60,26 @@ Add it to a dashboard:
 
 ```yaml
 type: custom:garden-irrigation-card
-title: Garden watering   # optional
+title: Garden watering   # optional — header label when a single setup
+mode: view               # "view" (default) or "edit"
+setup: Garden            # optional — pin to a setup by name or entry_id
 ```
 
-From the card you can:
+The card has two modes (toggle with the **Edit / Done** button):
 
-- **Add zone** — name + switch picker + duration.
-- **Delete zone** (trash icon).
-- **Duration** slider (1–60 min) — released value is saved.
-- **Schedules** — add a time (applies every day) or remove with the chip's ✕.
-  For per-day schedules, use the zone's *Reconfigure* dialog.
-- **Run now / Stop**, with a live countdown and a "Watering · scheduled/manual"
-  badge on the active zone.
+- **View mode** — adjust each zone's **duration** slider, **set times**
+  (schedules in *specific* mode, or the start time in *sequential* mode), and
+  **Run now / Stop**. Structural controls are hidden.
+- **Edit mode** — everything in view mode, plus:
+  - **Add zone** / **Add setup** (only visible in edit mode)
+  - **Delete** zone or setup
+  - the zone's **switch** and **pre/post scripts** (shown and editable)
+  - the setup's **scheduling-mode toggle** (sequential ⇄ specific) and, for
+    sequential, the **start time + days** editor
+
+When more than one setup exists, a dropdown in the header switches between them.
+All time fields are **24-hour**. A live countdown and a
+"Watering · scheduled/manual" badge appear on the active zone.
 
 > The card talks to the integration over admin-only websocket commands and reads
 > live run state from each zone's switch entity, so it updates in real time.

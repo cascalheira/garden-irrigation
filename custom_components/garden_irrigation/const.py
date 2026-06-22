@@ -12,21 +12,24 @@ PLATFORMS = [Platform.SWITCH, Platform.SENSOR]
 SUBENTRY_TYPE_ZONE = "zone"
 
 # Config / option keys
-CONF_MODE = "mode"
+CONF_MODE = "mode"  # scheduling mode of a setup: sequential | specific
+CONF_START_TIME = "start_time"  # sequential setups: when the chain starts
 CONF_NAME = "name"
 CONF_SWITCH_ENTITY = "switch_entity"
 CONF_DURATION = "duration"  # minutes
-CONF_SCHEDULES = "schedules"
+CONF_SCHEDULES = "schedules"  # specific setups: per-zone schedules
 CONF_TIME = "time"
 CONF_DAYS = "days"
 CONF_PRE_SCRIPT = "pre_script"
 CONF_POST_SCRIPT = "post_script"
 
-# Watering modes
-MODE_SEQUENTIAL = "sequential"
-MODE_PARALLEL = "parallel"
-DEFAULT_MODE = MODE_SEQUENTIAL
-MODES = [MODE_SEQUENTIAL, MODE_PARALLEL]
+# Scheduling modes
+MODE_SEQUENTIAL = "sequential"  # one setup start time; zones run back-to-back
+MODE_SPECIFIC = "specific"  # each zone has its own schedule(s)
+DEFAULT_MODE = MODE_SPECIFIC
+MODES = [MODE_SEQUENTIAL, MODE_SPECIFIC]
+
+DEFAULT_START_TIME = "06:00"
 
 # Duration bounds (minutes)
 MIN_DURATION = 1

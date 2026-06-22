@@ -1,103 +1,89 @@
 /*
  * Garden Irrigation card
- * A custom Lovelace card that sets up zones and schedules for the
- * `garden_irrigation` integration. Plain custom element (no build step).
+ * Manages multiple irrigation setups, each either "sequential" (one start time,
+ * zones run in order) or "specific" (per-zone schedules). Two card modes:
+ *   - view: adjust durations, set times, run/stop
+ *   - edit: everything above + add/delete zones & setups, switch & script
+ *           assignment, scheduling-mode toggle.
+ * Plain custom element, no build step. All time fields are forced 24h.
  */
 
 const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const DAY_SHORT = { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" };
+const DAY_LABEL = {
+  mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday",
+  fri: "Friday", sat: "Saturday", sun: "Sunday",
+};
 
 const STYLES = `
   :host { display: block; }
   ha-card { padding: 16px 18px 18px; }
-  .header {
-    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
-  }
+  .header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
   .header ha-icon { color: var(--primary-color); --mdc-icon-size: 26px; }
-  .header h1 {
-    font-size: 1.5rem; font-weight: 700; margin: 0; flex: 1;
-    color: var(--primary-text-color);
+  .header h1 { font-size: 1.5rem; font-weight: 700; margin: 0; color: var(--primary-text-color); }
+  .header .spacer { flex: 1; }
+  select.setup-select {
+    font: inherit; font-size: 1.2rem; font-weight: 700; border: none;
+    background: transparent; color: var(--primary-text-color); cursor: pointer;
   }
   button {
     font: inherit; cursor: pointer; border-radius: 10px;
-    border: 1px solid var(--divider-color);
-    background: var(--card-background-color, #fff);
-    color: var(--primary-text-color);
-    padding: 8px 14px; display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--divider-color); background: var(--card-background-color, #fff);
+    color: var(--primary-text-color); padding: 8px 14px;
+    display: inline-flex; align-items: center; gap: 6px;
     transition: background .15s, border-color .15s;
   }
   button:hover { background: var(--secondary-background-color); }
   button.primary { font-weight: 600; }
-  button.add-zone { font-weight: 600; }
-  button:disabled { opacity: .5; cursor: default; }
-  .zone {
-    border: 1px solid var(--divider-color); border-radius: 16px;
-    padding: 16px 18px; margin-top: 14px;
+  button.active { border-color: var(--primary-color); color: var(--primary-color); font-weight: 600; }
+  .icon-btn { border-radius: 10px; padding: 8px; line-height: 0; }
+  .icon-btn ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); }
+  .toggle { display: inline-flex; border: 1px solid var(--divider-color); border-radius: 10px; overflow: hidden; }
+  .toggle button { border: none; border-radius: 0; padding: 6px 12px; }
+  .toggle button.on { background: var(--primary-color); color: var(--text-primary-color, #fff); }
+  .setup-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .seq-bar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin-top: 10px;
   }
-  .zone.running {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 1px var(--primary-color);
-  }
+  .seq-bar .lbl { color: var(--secondary-text-color); }
+  .zone { border: 1px solid var(--divider-color); border-radius: 16px; padding: 16px 18px; margin-top: 14px; }
+  .zone.running { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
   .zone-head { display: flex; align-items: flex-start; gap: 10px; }
   .zone-head .titles { flex: 1; min-width: 0; }
-  .zone-name {
-    font-size: 1.15rem; font-weight: 700; color: var(--primary-text-color);
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  }
-  .zone-sub {
-    font-family: var(--code-font-family, monospace);
-    color: var(--secondary-text-color); font-size: .9rem; margin-top: 2px;
-  }
-  .badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: var(--primary-color); color: var(--text-primary-color, #fff);
-    border-radius: 999px; padding: 3px 10px; font-size: .8rem; font-weight: 600;
-    opacity: .92;
-  }
+  .zone-name { font-size: 1.15rem; font-weight: 700; color: var(--primary-text-color); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .zone-name input { font: inherit; font-weight: 700; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); }
+  .zone-sub { font-family: var(--code-font-family, monospace); color: var(--secondary-text-color); font-size: .9rem; margin-top: 4px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; background: var(--primary-color); color: var(--text-primary-color,#fff); border-radius: 999px; padding: 3px 10px; font-size: .8rem; font-weight: 600; opacity: .92; }
   .badge ha-icon { --mdc-icon-size: 15px; }
-  .icon-btn {
-    border-radius: 10px; padding: 8px; line-height: 0;
-  }
-  .icon-btn ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); }
   .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
   .row .label { width: 86px; color: var(--primary-text-color); font-weight: 500; }
   input[type="range"] { flex: 1; accent-color: var(--primary-color); height: 4px; }
   .dur-value { font-weight: 700; min-width: 56px; text-align: right; }
   .sched-label { color: var(--primary-text-color); font-weight: 500; margin-top: 14px; }
   .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
-  .chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--secondary-background-color); border-radius: 999px;
-    padding: 5px 10px; font-size: .92rem;
-  }
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--secondary-background-color); border-radius: 999px; padding: 5px 10px; font-size: .92rem; }
   .chip ha-icon { --mdc-icon-size: 16px; color: var(--secondary-text-color); }
   .chip .x { cursor: pointer; color: var(--secondary-text-color); padding: 0 2px; }
   .chip .x:hover { color: var(--error-color); }
   .no-sched { color: var(--secondary-text-color); }
-  .time-add {
-    display: inline-flex; align-items: center; gap: 6px;
-    border: 1px solid var(--divider-color); border-radius: 10px; padding: 4px 8px;
-  }
-  .time-add input[type="time"] {
-    border: none; background: transparent; color: var(--primary-text-color);
-    font: inherit;
-  }
+  .time24 { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--divider-color); border-radius: 10px; padding: 3px 8px; }
+  .time24 select { font: inherit; border: none; background: transparent; color: var(--primary-text-color); cursor: pointer; }
+  .time24 .colon { color: var(--secondary-text-color); }
+  .days { display: inline-flex; gap: 4px; }
+  .day { width: 30px; height: 30px; padding: 0; justify-content: center; border-radius: 50%; color: var(--secondary-text-color); }
+  .day.on { background: var(--primary-color); color: var(--text-primary-color,#fff); border-color: var(--primary-color); }
+  .days-static { color: var(--primary-text-color); }
   hr { border: none; border-top: 1px solid var(--divider-color); margin: 16px 0; }
   .actions { display: flex; align-items: center; gap: 14px; }
   .status { color: var(--secondary-text-color); }
   .status b { color: var(--primary-text-color); font-variant-numeric: tabular-nums; }
   button.stop { color: var(--error-color); border-color: var(--error-color); }
-  .form {
-    border: 1px dashed var(--divider-color); border-radius: 14px;
-    padding: 14px 16px; margin-top: 12px;
-    display: grid; gap: 10px;
-  }
-  .form .field { display: flex; flex-direction: column; gap: 4px; }
-  .form label { font-size: .85rem; color: var(--secondary-text-color); }
-  .form input[type="text"], .form input[type="number"] {
-    font: inherit; padding: 8px 10px; border-radius: 8px;
-    border: 1px solid var(--divider-color);
-    background: var(--card-background-color, #fff); color: var(--primary-text-color);
-  }
+  .field-row { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 180px; }
+  .field label { font-size: .8rem; color: var(--secondary-text-color); }
+  .form { border: 1px dashed var(--divider-color); border-radius: 14px; padding: 14px 16px; margin-top: 12px; display: grid; gap: 10px; }
+  .form input[type="text"], .form input[type="number"] { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); }
   .form .form-actions { display: flex; gap: 10px; justify-content: flex-end; }
   .empty { color: var(--secondary-text-color); margin-top: 12px; }
 `;
@@ -106,10 +92,12 @@ class GardenIrrigationCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._zones = [];
-    this._configured = true;
+    this._setups = [];
     this._fetched = false;
-    this._addOpen = false;
+    this._edit = false;
+    this._selected = null;
+    this._addZoneOpen = false;
+    this._addSetupOpen = false;
     this._sig = null;
     this._refs = {};
     this._tick = this._tick.bind(this);
@@ -117,23 +105,25 @@ class GardenIrrigationCard extends HTMLElement {
 
   setConfig(config) {
     this._config = config || {};
+    this._edit = config && config.mode === "edit";
   }
 
   set hass(hass) {
     this._hass = hass;
     if (!this._fetched) {
       this._fetched = true;
-      this._fetchZones();
+      this._fetch();
     }
     this._sync();
   }
 
   getCardSize() {
-    return 2 + this._zones.length * 4;
+    const setup = this._currentSetup();
+    return 3 + (setup ? setup.zones.length * 4 : 0);
   }
 
   static getStubConfig() {
-    return { title: "Garden watering" };
+    return { mode: "view" };
   }
 
   connectedCallback() {
@@ -147,38 +137,51 @@ class GardenIrrigationCard extends HTMLElement {
 
   /* ---------- data ---------- */
 
-  async _ws(message) {
+  _ws(message) {
     return this._hass.connection.sendMessagePromise(message);
   }
 
-  async _fetchZones() {
+  async _fetch() {
     try {
       const res = await this._ws({ type: "garden_irrigation/get" });
-      this._configured = res.configured;
-      this._zones = res.zones || [];
-      this._mode = res.mode;
+      this._setups = res.setups || [];
+      this._error = null;
     } catch (err) {
-      this._configured = false;
+      this._setups = [];
       this._error = err && err.message ? err.message : String(err);
     }
-    this._sig = null; // force rebuild
+    // Resolve the selected setup.
+    if (!this._setups.find((s) => s.entry_id === this._selected)) {
+      const pin = this._config.setup;
+      const match = this._setups.find(
+        (s) => s.entry_id === pin || s.name === pin
+      );
+      this._selected = (match || this._setups[0] || {}).entry_id || null;
+    }
+    this._sig = null;
     this._sync();
 
-    // A freshly added zone's entity is created during the async reload, so its
-    // entity_id can be momentarily null — refetch shortly until it resolves.
     clearTimeout(this._retry);
-    if (this._configured && this._zones.some((z) => !z.entity_id)) {
-      this._retry = setTimeout(() => this._fetchZones(), 1000);
+    const cur = this._currentSetup();
+    if (cur && cur.zones.some((z) => !z.entity_id)) {
+      this._retry = setTimeout(() => this._fetch(), 1000);
     }
+  }
+
+  _currentSetup() {
+    return this._setups.find((s) => s.entry_id === this._selected) || null;
   }
 
   /* ---------- render orchestration ---------- */
 
   _computeSig() {
     return JSON.stringify({
-      configured: this._configured,
-      addOpen: this._addOpen,
-      zones: this._zones,
+      edit: this._edit,
+      selected: this._selected,
+      addZone: this._addZoneOpen,
+      addSetup: this._addSetupOpen,
+      error: this._error,
+      setups: this._setups,
     });
   }
 
@@ -192,143 +195,230 @@ class GardenIrrigationCard extends HTMLElement {
     this._update();
   }
 
+  _rebuild() {
+    this._sig = null;
+    this._sync();
+  }
+
   _stateFor(zone) {
     if (!zone.entity_id) return null;
     return this._hass.states[zone.entity_id] || null;
   }
 
-  /* ---------- build (structure) ---------- */
+  /* ---------- build ---------- */
 
   _build() {
     this._refs = {};
     const root = document.createElement("div");
     const style = document.createElement("style");
     style.textContent = STYLES;
-
     const card = document.createElement("ha-card");
 
-    // Header
-    const header = document.createElement("div");
-    header.className = "header";
-    header.innerHTML = `
-      <ha-icon icon="mdi:water"></ha-icon>
-      <h1>${this._escape(this._config.title || "Garden watering")}</h1>
-    `;
-    const addBtn = document.createElement("button");
-    addBtn.className = "add-zone";
-    addBtn.innerHTML = `<ha-icon icon="mdi:plus"></ha-icon> Add zone`;
-    addBtn.addEventListener("click", () => {
-      this._addOpen = !this._addOpen;
-      this._sig = null;
-      this._sync();
-    });
-    header.appendChild(addBtn);
-    card.appendChild(header);
+    card.appendChild(this._buildHeader());
 
-    if (!this._configured) {
+    if (this._setups.length === 0) {
       const empty = document.createElement("div");
       empty.className = "empty";
-      empty.textContent =
-        "Garden Irrigation is not set up yet. Add the integration under Settings → Devices & Services.";
+      empty.textContent = this._edit
+        ? "No setups yet. Use “Add setup” to create one (e.g. Garden, Trees)."
+        : "No irrigation setups. Switch to edit mode to add one.";
       card.appendChild(empty);
-      root.appendChild(style);
-      root.appendChild(card);
+      if (this._addSetupOpen) card.appendChild(this._buildAddSetupForm());
+      root.append(style, card);
       this.shadowRoot.replaceChildren(root);
       return;
     }
 
-    if (this._addOpen) {
-      card.appendChild(this._buildAddForm());
+    if (this._addSetupOpen) card.appendChild(this._buildAddSetupForm());
+
+    const setup = this._currentSetup();
+    if (setup) {
+      if (this._edit) card.appendChild(this._buildSetupBar(setup));
+      if (setup.mode === "sequential") card.appendChild(this._buildSeqBar(setup));
+      if (this._addZoneOpen && this._edit)
+        card.appendChild(this._buildAddZoneForm(setup));
+      if (setup.zones.length === 0 && !this._addZoneOpen) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No zones yet.";
+        card.appendChild(empty);
+      }
+      for (const zone of setup.zones) card.appendChild(this._buildZone(setup, zone));
     }
 
-    if (this._zones.length === 0 && !this._addOpen) {
-      const empty = document.createElement("div");
-      empty.className = "empty";
-      empty.textContent = "No zones yet. Use “Add zone” to create one.";
-      card.appendChild(empty);
-    }
-
-    for (const zone of this._zones) {
-      card.appendChild(this._buildZone(zone));
-    }
-
-    root.appendChild(style);
-    root.appendChild(card);
+    root.append(style, card);
     this.shadowRoot.replaceChildren(root);
   }
 
-  _buildAddForm() {
-    const form = document.createElement("div");
-    form.className = "form";
-    form.innerHTML = `
-      <div class="field">
-        <label>Zone name</label>
-        <input type="text" id="gi-name" placeholder="e.g. Front lawn" />
-      </div>
-      <div class="field">
-        <label>Switch / relay</label>
-        <div id="gi-picker"></div>
-      </div>
-      <div class="field">
-        <label>Duration (minutes)</label>
-        <input type="number" id="gi-dur" min="1" max="60" value="10" />
-      </div>
-      <div class="form-actions">
-        <button id="gi-cancel">Cancel</button>
-        <button id="gi-save" class="primary">Save zone</button>
-      </div>
-    `;
+  _buildHeader() {
+    const header = document.createElement("div");
+    header.className = "header";
 
-    // Entity picker (native HA element when available, else a text input).
-    const pickerHost = form.querySelector("#gi-picker");
-    let getEntity;
-    if (customElements.get("ha-entity-picker")) {
-      const picker = document.createElement("ha-entity-picker");
-      picker.hass = this._hass;
-      picker.includeDomains = ["switch", "input_boolean"];
-      picker.allowCustomEntity = false;
-      pickerHost.appendChild(picker);
-      getEntity = () => picker.value;
+    const icon = document.createElement("ha-icon");
+    icon.setAttribute("icon", "mdi:water");
+    header.appendChild(icon);
+
+    const setup = this._currentSetup();
+    if (this._setups.length <= 1 || !setup) {
+      const h1 = document.createElement("h1");
+      h1.textContent =
+        this._config.title || (setup ? setup.name : "Garden watering");
+      header.appendChild(h1);
     } else {
-      const inp = document.createElement("input");
-      inp.type = "text";
-      inp.placeholder = "switch.valve_front_lawn";
-      pickerHost.appendChild(inp);
-      getEntity = () => inp.value.trim();
+      const sel = document.createElement("select");
+      sel.className = "setup-select";
+      for (const s of this._setups) {
+        const o = document.createElement("option");
+        o.value = s.entry_id;
+        o.textContent = s.name;
+        if (s.entry_id === this._selected) o.selected = true;
+        sel.appendChild(o);
+      }
+      sel.addEventListener("change", () => {
+        this._selected = sel.value;
+        this._rebuild();
+      });
+      header.appendChild(sel);
     }
 
-    form.querySelector("#gi-cancel").addEventListener("click", () => {
-      this._addOpen = false;
-      this._sig = null;
-      this._sync();
-    });
+    const spacer = document.createElement("div");
+    spacer.className = "spacer";
+    header.appendChild(spacer);
 
-    form.querySelector("#gi-save").addEventListener("click", async () => {
-      const name = form.querySelector("#gi-name").value.trim();
-      const switch_entity = getEntity();
-      const duration = parseInt(form.querySelector("#gi-dur").value, 10) || 10;
-      if (!name || !switch_entity) {
-        this._toast("Enter a name and pick a switch.");
-        return;
-      }
-      try {
-        await this._ws({
-          type: "garden_irrigation/zone/add",
-          name,
-          switch_entity,
-          duration,
-        });
-        this._addOpen = false;
-        await this._fetchZones();
-      } catch (err) {
-        this._toast(`Could not add zone: ${err.message || err}`);
-      }
-    });
+    if (this._edit) {
+      const addZone = document.createElement("button");
+      addZone.className = "add-zone";
+      addZone.innerHTML = `<ha-icon icon="mdi:plus"></ha-icon> Add zone`;
+      addZone.disabled = !setup;
+      addZone.addEventListener("click", () => {
+        this._addZoneOpen = !this._addZoneOpen;
+        this._rebuild();
+      });
+      header.appendChild(addZone);
 
-    return form;
+      const addSetup = document.createElement("button");
+      addSetup.innerHTML = `<ha-icon icon="mdi:folder-plus-outline"></ha-icon> Add setup`;
+      addSetup.addEventListener("click", () => {
+        this._addSetupOpen = !this._addSetupOpen;
+        this._rebuild();
+      });
+      header.appendChild(addSetup);
+    }
+
+    const modeBtn = document.createElement("button");
+    modeBtn.innerHTML = this._edit
+      ? `<ha-icon icon="mdi:check"></ha-icon> Done`
+      : `<ha-icon icon="mdi:pencil"></ha-icon> Edit`;
+    if (this._edit) modeBtn.classList.add("active");
+    modeBtn.addEventListener("click", () => {
+      this._edit = !this._edit;
+      this._addZoneOpen = false;
+      this._addSetupOpen = false;
+      this._rebuild();
+    });
+    header.appendChild(modeBtn);
+
+    return header;
   }
 
-  _buildZone(zone) {
+  _buildSetupBar(setup) {
+    const bar = document.createElement("div");
+    bar.className = "setup-bar";
+
+    const lbl = document.createElement("span");
+    lbl.className = "lbl";
+    lbl.textContent = "Scheduling:";
+    bar.appendChild(lbl);
+
+    const toggle = document.createElement("div");
+    toggle.className = "toggle";
+    [
+      ["sequential", "Sequential"],
+      ["specific", "Specific times"],
+    ].forEach(([value, label]) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      if (setup.mode === value) b.classList.add("on");
+      b.addEventListener("click", () => {
+        if (setup.mode !== value) this._updateSetup(setup.entry_id, { mode: value });
+      });
+      toggle.appendChild(b);
+    });
+    bar.appendChild(toggle);
+
+    const spacer = document.createElement("div");
+    spacer.style.flex = "1";
+    bar.appendChild(spacer);
+
+    const del = document.createElement("button");
+    del.className = "icon-btn";
+    del.title = "Delete setup";
+    del.innerHTML = `<ha-icon icon="mdi:trash-can-outline"></ha-icon>`;
+    del.addEventListener("click", () => this._deleteSetup(setup));
+    bar.appendChild(del);
+
+    return bar;
+  }
+
+  _buildSeqBar(setup) {
+    const bar = document.createElement("div");
+    bar.className = "seq-bar";
+
+    const lbl = document.createElement("span");
+    lbl.className = "lbl";
+    lbl.textContent = "Starts at";
+    bar.appendChild(lbl);
+
+    const time = this._make24hTime(setup.start_time, (v) =>
+      this._updateSetup(setup.entry_id, { start_time: v })
+    );
+    bar.appendChild(time.wrap);
+
+    const on = document.createElement("span");
+    on.className = "lbl";
+    on.textContent = "on";
+    bar.appendChild(on);
+
+    if (this._edit) {
+      const days = this._makeDaysEditor(setup.days, true, (d) =>
+        this._updateSetup(setup.entry_id, { days: d.length ? d : WEEKDAYS })
+      );
+      bar.appendChild(days.wrap);
+    } else {
+      const ds = document.createElement("span");
+      ds.className = "days-static";
+      ds.textContent = this._formatDays(setup.days);
+      bar.appendChild(ds);
+    }
+
+    const spacer = document.createElement("div");
+    spacer.style.flex = "1";
+    bar.appendChild(spacer);
+
+    // Run / stop the whole sequence.
+    const anyRunning = setup.zones.some((z) => {
+      const st = this._stateFor(z);
+      return st && st.state === "on";
+    });
+    const run = document.createElement("button");
+    if (anyRunning) {
+      run.className = "stop";
+      run.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> Stop`;
+      run.addEventListener("click", () =>
+        this._ws({ type: "garden_irrigation/setup/stop", entry_id: setup.entry_id })
+      );
+    } else {
+      run.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> Run sequence`;
+      run.addEventListener("click", () =>
+        this._ws({ type: "garden_irrigation/setup/run", entry_id: setup.entry_id })
+      );
+    }
+    bar.appendChild(run);
+
+    return bar;
+  }
+
+  _buildZone(setup, zone) {
     const refs = {};
     const el = document.createElement("div");
     el.className = "zone";
@@ -337,27 +427,73 @@ class GardenIrrigationCard extends HTMLElement {
     // Head
     const head = document.createElement("div");
     head.className = "zone-head";
-    head.innerHTML = `
-      <div class="titles">
-        <div class="zone-name">
-          <span>${this._escape(zone.name)}</span>
-          <span class="badge" hidden>
-            <ha-icon icon="mdi:water"></ha-icon><span class="badge-text"></span>
-          </span>
-        </div>
-        <div class="zone-sub">${this._escape(zone.switch_entity || "")}</div>
-      </div>
-    `;
-    const del = document.createElement("button");
-    del.className = "icon-btn";
-    del.innerHTML = `<ha-icon icon="mdi:trash-can-outline"></ha-icon>`;
-    del.addEventListener("click", () => this._deleteZone(zone));
-    head.appendChild(del);
-    el.appendChild(head);
-    refs.badge = head.querySelector(".badge");
-    refs.badgeText = head.querySelector(".badge-text");
+    const titles = document.createElement("div");
+    titles.className = "titles";
 
-    // Duration
+    const nameRow = document.createElement("div");
+    nameRow.className = "zone-name";
+    if (this._edit) {
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = zone.name || "";
+      nameInput.addEventListener("change", () => {
+        const v = nameInput.value.trim();
+        if (v && v !== zone.name)
+          this._updateZone(setup.entry_id, zone.zone_id, { name: v });
+      });
+      nameRow.appendChild(nameInput);
+    } else {
+      const n = document.createElement("span");
+      n.textContent = zone.name;
+      nameRow.appendChild(n);
+    }
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.hidden = true;
+    badge.innerHTML = `<ha-icon icon="mdi:water"></ha-icon><span class="badge-text"></span>`;
+    nameRow.appendChild(badge);
+    titles.appendChild(nameRow);
+    refs.badge = badge;
+    refs.badgeText = badge.querySelector(".badge-text");
+
+    // Switch line — shown in edit mode (editable picker), hidden in view.
+    if (this._edit) {
+      const subWrap = document.createElement("div");
+      subWrap.className = "field-row";
+      const swField = document.createElement("div");
+      swField.className = "field";
+      const swLabel = document.createElement("label");
+      swLabel.textContent = "Switch / relay";
+      const sw = this._entityPicker(
+        zone.switch_entity,
+        ["switch", "input_boolean"],
+        (v) => v && this._updateZone(setup.entry_id, zone.zone_id, { switch_entity: v })
+      );
+      swField.append(swLabel, sw.el);
+
+      const preField = this._scriptField("Pre-script", zone.pre_script, (v) =>
+        this._updateZone(setup.entry_id, zone.zone_id, { pre_script: v || null })
+      );
+      const postField = this._scriptField("Post-script", zone.post_script, (v) =>
+        this._updateZone(setup.entry_id, zone.zone_id, { post_script: v || null })
+      );
+      subWrap.append(swField, preField, postField);
+      titles.appendChild(subWrap);
+    }
+
+    head.appendChild(titles);
+
+    if (this._edit) {
+      const del = document.createElement("button");
+      del.className = "icon-btn";
+      del.title = "Delete zone";
+      del.innerHTML = `<ha-icon icon="mdi:trash-can-outline"></ha-icon>`;
+      del.addEventListener("click", () => this._deleteZone(setup, zone));
+      head.appendChild(del);
+    }
+    el.appendChild(head);
+
+    // Duration slider (always editable)
     const durRow = document.createElement("div");
     durRow.className = "row";
     durRow.innerHTML = `<span class="label">Duration</span>`;
@@ -374,65 +510,55 @@ class GardenIrrigationCard extends HTMLElement {
       durVal.textContent = `${slider.value} min`;
     });
     slider.addEventListener("change", () =>
-      this._updateZone(zone, { duration: parseInt(slider.value, 10) })
+      this._updateZone(setup.entry_id, zone.zone_id, {
+        duration: parseInt(slider.value, 10),
+      })
     );
-    durRow.appendChild(slider);
-    durRow.appendChild(durVal);
+    durRow.append(slider, durVal);
     el.appendChild(durRow);
     refs.slider = slider;
     refs.durVal = durVal;
 
-    // Schedules
-    const schedLabel = document.createElement("div");
-    schedLabel.className = "sched-label";
-    schedLabel.textContent = "Schedules";
-    el.appendChild(schedLabel);
+    // Schedules (specific mode only)
+    if (setup.mode === "specific") {
+      const schedLabel = document.createElement("div");
+      schedLabel.className = "sched-label";
+      schedLabel.textContent = "Schedules";
+      el.appendChild(schedLabel);
 
-    const chips = document.createElement("div");
-    chips.className = "chips";
-    const schedules = zone.schedules || [];
-    if (schedules.length === 0) {
-      const none = document.createElement("span");
-      none.className = "no-sched";
-      none.textContent = "No schedules";
-      chips.appendChild(none);
-    }
-    schedules.forEach((s, index) => {
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.innerHTML = `<ha-icon icon="mdi:clock-outline"></ha-icon><span>${this._escape(
-        s.time
-      )}</span><span class="x" title="Remove">✕</span>`;
-      chip
-        .querySelector(".x")
-        .addEventListener("click", () => this._removeSchedule(zone, index));
-      chips.appendChild(chip);
-    });
-
-    // Time picker + Add
-    const timeAdd = document.createElement("span");
-    timeAdd.className = "time-add";
-    const timeInput = document.createElement("input");
-    timeInput.type = "time";
-    timeAdd.appendChild(timeInput);
-    const clock = document.createElement("ha-icon");
-    clock.setAttribute("icon", "mdi:clock-outline");
-    clock.style.setProperty("--mdc-icon-size", "18px");
-    clock.style.color = "var(--secondary-text-color)";
-    timeAdd.appendChild(clock);
-    chips.appendChild(timeAdd);
-
-    const addSched = document.createElement("button");
-    addSched.textContent = "Add";
-    addSched.addEventListener("click", () => {
-      if (!timeInput.value) {
-        this._toast("Pick a time first.");
-        return;
+      const chips = document.createElement("div");
+      chips.className = "chips";
+      const schedules = zone.schedules || [];
+      if (schedules.length === 0) {
+        const none = document.createElement("span");
+        none.className = "no-sched";
+        none.textContent = "No schedules";
+        chips.appendChild(none);
       }
-      this._addSchedule(zone, timeInput.value);
-    });
-    chips.appendChild(addSched);
-    el.appendChild(chips);
+      schedules.forEach((s, index) => {
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        chip.innerHTML = `<ha-icon icon="mdi:clock-outline"></ha-icon><span>${this._escape(
+          s.time
+        )}</span><span class="x" title="Remove">✕</span>`;
+        chip
+          .querySelector(".x")
+          .addEventListener("click", () =>
+            this._removeSchedule(setup.entry_id, zone.zone_id, index)
+          );
+        chips.appendChild(chip);
+      });
+
+      const time = this._make24hTime("06:00", null);
+      chips.appendChild(time.wrap);
+      const addBtn = document.createElement("button");
+      addBtn.textContent = "Add";
+      addBtn.addEventListener("click", () =>
+        this._addSchedule(setup.entry_id, zone.zone_id, time.get())
+      );
+      chips.appendChild(addBtn);
+      el.appendChild(chips);
+    }
 
     el.appendChild(document.createElement("hr"));
 
@@ -443,20 +569,133 @@ class GardenIrrigationCard extends HTMLElement {
     action.addEventListener("click", () => this._toggleRun(zone));
     const status = document.createElement("span");
     status.className = "status";
-    actions.appendChild(action);
-    actions.appendChild(status);
+    actions.append(action, status);
     el.appendChild(actions);
     refs.action = action;
     refs.status = status;
+    refs.duration = zone.duration;
 
     this._refs[zone.zone_id] = refs;
     return el;
   }
 
+  _scriptField(label, value, onChange) {
+    const field = document.createElement("div");
+    field.className = "field";
+    const l = document.createElement("label");
+    l.textContent = label;
+    const picker = this._entityPicker(value, ["script"], onChange);
+    field.append(l, picker.el);
+    return field;
+  }
+
+  _buildAddZoneForm(setup) {
+    const form = document.createElement("div");
+    form.className = "form";
+    form.innerHTML = `
+      <div class="field"><label>Zone name</label><input type="text" id="z-name" placeholder="e.g. Front lawn" /></div>
+      <div class="field"><label>Switch / relay</label><div id="z-picker"></div></div>
+      <div class="field"><label>Duration (minutes)</label><input type="number" id="z-dur" min="1" max="60" value="10" /></div>
+      <div class="form-actions"><button id="z-cancel">Cancel</button><button id="z-save" class="primary">Save zone</button></div>
+    `;
+    const sw = this._entityPicker(null, ["switch", "input_boolean"], () => {});
+    form.querySelector("#z-picker").appendChild(sw.el);
+    form.querySelector("#z-cancel").addEventListener("click", () => {
+      this._addZoneOpen = false;
+      this._rebuild();
+    });
+    form.querySelector("#z-save").addEventListener("click", async () => {
+      const name = form.querySelector("#z-name").value.trim();
+      const switch_entity = sw.get();
+      const duration = parseInt(form.querySelector("#z-dur").value, 10) || 10;
+      if (!name || !switch_entity) {
+        this._toast("Enter a name and pick a switch.");
+        return;
+      }
+      try {
+        await this._ws({
+          type: "garden_irrigation/zone/add",
+          entry_id: setup.entry_id,
+          name,
+          switch_entity,
+          duration,
+        });
+        this._addZoneOpen = false;
+        await this._fetch();
+      } catch (err) {
+        this._toast(`Could not add zone: ${err.message || err}`);
+      }
+    });
+    return form;
+  }
+
+  _buildAddSetupForm() {
+    const form = document.createElement("div");
+    form.className = "form";
+    form.innerHTML = `
+      <div class="field"><label>Setup name</label><input type="text" id="s-name" placeholder="e.g. Trees" /></div>
+      <div class="field"><label>Scheduling mode</label>
+        <div class="toggle" id="s-mode">
+          <button data-v="specific" class="on">Specific times</button>
+          <button data-v="sequential">Sequential</button>
+        </div>
+      </div>
+      <div class="field" id="s-seq" hidden>
+        <label>Start time &amp; days</label>
+        <div class="seq-bar" id="s-seqbar"></div>
+      </div>
+      <div class="form-actions"><button id="s-cancel">Cancel</button><button id="s-save" class="primary">Create setup</button></div>
+    `;
+    let mode = "specific";
+    const seqWrap = form.querySelector("#s-seq");
+    const seqBar = form.querySelector("#s-seqbar");
+    const time = this._make24hTime("06:00", null);
+    const days = this._makeDaysEditor(WEEKDAYS, true, null);
+    seqBar.append(time.wrap, days.wrap);
+
+    form.querySelectorAll("#s-mode button").forEach((b) => {
+      b.addEventListener("click", () => {
+        mode = b.dataset.v;
+        form.querySelectorAll("#s-mode button").forEach((x) => x.classList.remove("on"));
+        b.classList.add("on");
+        seqWrap.hidden = mode !== "sequential";
+      });
+    });
+
+    form.querySelector("#s-cancel").addEventListener("click", () => {
+      this._addSetupOpen = false;
+      this._rebuild();
+    });
+    form.querySelector("#s-save").addEventListener("click", async () => {
+      const name = form.querySelector("#s-name").value.trim();
+      if (!name) {
+        this._toast("Enter a setup name.");
+        return;
+      }
+      try {
+        const res = await this._ws({
+          type: "garden_irrigation/setup/add",
+          name,
+          mode,
+          start_time: time.get(),
+          days: days.get(),
+        });
+        this._addSetupOpen = false;
+        if (res && res.entry_id) this._selected = res.entry_id;
+        await this._fetch();
+      } catch (err) {
+        this._toast(`Could not add setup: ${err.message || err}`);
+      }
+    });
+    return form;
+  }
+
   /* ---------- dynamic update ---------- */
 
   _update() {
-    for (const zone of this._zones) {
+    const setup = this._currentSetup();
+    if (!setup) return;
+    for (const zone of setup.zones) {
       const refs = this._refs[zone.zone_id];
       if (!refs) continue;
       const st = this._stateFor(zone);
@@ -464,7 +703,6 @@ class GardenIrrigationCard extends HTMLElement {
       const attrs = (st && st.attributes) || {};
 
       refs.el.classList.toggle("running", !!running);
-
       if (running) {
         refs.badge.hidden = false;
         const source = attrs.run_source === "scheduled" ? "scheduled" : "manual";
@@ -473,22 +711,15 @@ class GardenIrrigationCard extends HTMLElement {
         refs.badge.hidden = true;
       }
 
-      // Keep slider in sync unless the user is dragging it.
       if (this.shadowRoot.activeElement !== refs.slider) {
         refs.slider.value = String(zone.duration);
         refs.durVal.textContent = `${zone.duration} min`;
       }
 
-      // Action button + status text
       if (running) {
         refs.action.className = "stop";
         refs.action.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> Stop`;
         refs.action.endsAt = attrs.ends_at || null;
-      } else if (attrs.queued) {
-        refs.action.className = "";
-        refs.action.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> Run now`;
-        refs.action.endsAt = null;
-        refs.status.innerHTML = "Queued…";
       } else {
         refs.action.className = "";
         refs.action.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> Run now`;
@@ -514,7 +745,7 @@ class GardenIrrigationCard extends HTMLElement {
     }
   }
 
-  /* ---------- actions ---------- */
+  /* ---------- mutations ---------- */
 
   async _toggleRun(zone) {
     const st = this._stateFor(zone);
@@ -523,9 +754,8 @@ class GardenIrrigationCard extends HTMLElement {
       this._toast("Zone entity not ready yet.");
       return;
     }
-    const service = running ? "turn_off" : "turn_on";
     try {
-      await this._hass.callService("switch", service, {
+      await this._hass.callService("switch", running ? "turn_off" : "turn_on", {
         entity_id: zone.entity_id,
       });
     } catch (err) {
@@ -533,60 +763,165 @@ class GardenIrrigationCard extends HTMLElement {
     }
   }
 
-  async _updateZone(zone, changes) {
+  async _updateSetup(entry_id, changes) {
     try {
-      await this._ws({
-        type: "garden_irrigation/zone/update",
-        zone_id: zone.zone_id,
-        ...changes,
-      });
-      await this._fetchZones();
+      await this._ws({ type: "garden_irrigation/setup/update", entry_id, ...changes });
+      await this._fetch();
     } catch (err) {
       this._toast(`Update failed: ${err.message || err}`);
     }
   }
 
-  async _deleteZone(zone) {
-    if (!confirm(`Delete zone “${zone.name}”?`)) return;
+  async _deleteSetup(setup) {
+    if (!confirm(`Delete the whole “${setup.name}” setup and its zones?`)) return;
     try {
-      await this._ws({
-        type: "garden_irrigation/zone/delete",
-        zone_id: zone.zone_id,
-      });
-      await this._fetchZones();
+      await this._ws({ type: "garden_irrigation/setup/delete", entry_id: setup.entry_id });
+      this._selected = null;
+      await this._fetch();
     } catch (err) {
       this._toast(`Delete failed: ${err.message || err}`);
     }
   }
 
-  async _addSchedule(zone, time) {
+  async _addSetup() {
+    /* handled inline in the form */
+  }
+
+  async _updateZone(entry_id, zone_id, changes) {
+    try {
+      await this._ws({ type: "garden_irrigation/zone/update", entry_id, zone_id, ...changes });
+      await this._fetch();
+    } catch (err) {
+      this._toast(`Update failed: ${err.message || err}`);
+    }
+  }
+
+  async _deleteZone(setup, zone) {
+    if (!confirm(`Delete zone “${zone.name}”?`)) return;
+    try {
+      await this._ws({
+        type: "garden_irrigation/zone/delete",
+        entry_id: setup.entry_id,
+        zone_id: zone.zone_id,
+      });
+      await this._fetch();
+    } catch (err) {
+      this._toast(`Delete failed: ${err.message || err}`);
+    }
+  }
+
+  async _addSchedule(entry_id, zone_id, time) {
     try {
       await this._ws({
         type: "garden_irrigation/schedule/add",
-        zone_id: zone.zone_id,
+        entry_id,
+        zone_id,
         time,
         days: WEEKDAYS,
       });
-      await this._fetchZones();
+      await this._fetch();
     } catch (err) {
       this._toast(`Could not add schedule: ${err.message || err}`);
     }
   }
 
-  async _removeSchedule(zone, index) {
+  async _removeSchedule(entry_id, zone_id, index) {
     try {
       await this._ws({
         type: "garden_irrigation/schedule/remove",
-        zone_id: zone.zone_id,
+        entry_id,
+        zone_id,
         index,
       });
-      await this._fetchZones();
+      await this._fetch();
     } catch (err) {
       this._toast(`Could not remove schedule: ${err.message || err}`);
     }
   }
 
-  /* ---------- helpers ---------- */
+  /* ---------- ui helpers ---------- */
+
+  _make24hTime(value, onChange) {
+    const wrap = document.createElement("span");
+    wrap.className = "time24";
+    const hh = document.createElement("select");
+    const mm = document.createElement("select");
+    for (let i = 0; i < 24; i++) {
+      const o = document.createElement("option");
+      o.value = String(i).padStart(2, "0");
+      o.textContent = o.value;
+      hh.appendChild(o);
+    }
+    for (let i = 0; i < 60; i++) {
+      const o = document.createElement("option");
+      o.value = String(i).padStart(2, "0");
+      o.textContent = o.value;
+      mm.appendChild(o);
+    }
+    const [h, m] = String(value || "06:00").split(":");
+    hh.value = (h || "06").padStart(2, "0");
+    mm.value = (m || "00").padStart(2, "0");
+    const colon = document.createElement("span");
+    colon.className = "colon";
+    colon.textContent = ":";
+    wrap.append(hh, colon, mm);
+    const get = () => `${hh.value}:${mm.value}`;
+    if (onChange) {
+      hh.addEventListener("change", () => onChange(get()));
+      mm.addEventListener("change", () => onChange(get()));
+    }
+    return { wrap, get };
+  }
+
+  _makeDaysEditor(days, editable, onChange) {
+    const wrap = document.createElement("span");
+    wrap.className = "days";
+    const sel = new Set(days && days.length ? days : WEEKDAYS);
+    WEEKDAYS.forEach((d) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "day" + (sel.has(d) ? " on" : "");
+      b.textContent = DAY_SHORT[d];
+      b.title = DAY_LABEL[d];
+      if (editable) {
+        b.addEventListener("click", () => {
+          if (sel.has(d)) sel.delete(d);
+          else sel.add(d);
+          b.classList.toggle("on");
+          if (onChange) onChange(WEEKDAYS.filter((x) => sel.has(x)));
+        });
+      } else {
+        b.disabled = true;
+      }
+      wrap.appendChild(b);
+    });
+    return { wrap, get: () => WEEKDAYS.filter((x) => sel.has(x)) };
+  }
+
+  _entityPicker(value, domains, onChange) {
+    if (customElements.get("ha-entity-picker")) {
+      const p = document.createElement("ha-entity-picker");
+      p.hass = this._hass;
+      p.includeDomains = domains;
+      p.allowCustomEntity = false;
+      p.value = value || "";
+      p.addEventListener("value-changed", (e) => onChange(e.detail.value));
+      return { el: p, get: () => p.value };
+    }
+    const i = document.createElement("input");
+    i.type = "text";
+    i.value = value || "";
+    i.placeholder = `${domains[0]}.example`;
+    i.addEventListener("change", () => onChange(i.value.trim()));
+    return { el: i, get: () => i.value.trim() };
+  }
+
+  _formatDays(days) {
+    if (!days || days.length === 0 || days.length === 7) return "every day";
+    return WEEKDAYS.filter((d) => days.includes(d))
+      .map((d) => DAY_LABEL[d].slice(0, 3))
+      .join(", ");
+  }
 
   _toast(message) {
     this.dispatchEvent(
@@ -601,14 +936,7 @@ class GardenIrrigationCard extends HTMLElement {
   _escape(value) {
     return String(value == null ? "" : value).replace(
       /[&<>"']/g,
-      (c) =>
-        ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;",
-        }[c])
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
     );
   }
 }
@@ -619,7 +947,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "garden-irrigation-card",
   name: "Garden Irrigation",
-  description: "Set up and control garden irrigation zones and schedules.",
+  description: "Set up and control garden irrigation setups, zones and schedules.",
   preview: false,
 });
 
