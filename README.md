@@ -45,6 +45,32 @@ directory and restart.
    - Add one or more schedules (start time + days).
 4. Reconfigure a zone any time to edit its settings or schedules.
 
+## Dashboard card
+
+The integration ships a custom Lovelace card that adds/deletes zones, edits run
+duration, and manages schedules — all from the dashboard. The card JS is served
+and registered automatically (no manual *Resources* entry needed).
+
+Add it to a dashboard:
+
+```yaml
+type: custom:garden-irrigation-card
+title: Garden watering   # optional
+```
+
+From the card you can:
+
+- **Add zone** — name + switch picker + duration.
+- **Delete zone** (trash icon).
+- **Duration** slider (1–60 min) — released value is saved.
+- **Schedules** — add a time (applies every day) or remove with the chip's ✕.
+  For per-day schedules, use the zone's *Reconfigure* dialog.
+- **Run now / Stop**, with a live countdown and a "Watering · scheduled/manual"
+  badge on the active zone.
+
+> The card talks to the integration over admin-only websocket commands and reads
+> live run state from each zone's switch entity, so it updates in real time.
+
 ## Services
 
 | Service | Description |

@@ -101,6 +101,7 @@ class ZoneSwitch(SwitchEntity):
             attrs["remaining_seconds"] = self._controller.remaining_seconds(
                 self._zone_id
             )
+            attrs["run_source"] = self._controller.run_source(self._zone_id)
         if next_run is not None:
             attrs["next_run"] = next_run.isoformat()
         return attrs

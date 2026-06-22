@@ -3,16 +3,46 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS, SERVICE_STOP_ALL
 from .coordinator import IrrigationController
+from .websocket_api import async_register_websocket_commands
 
 _LOGGER = logging.getLogger(__name__)
 
 type GardenIrrigationConfigEntry = ConfigEntry[IrrigationController]
+
+CARD_URL = "/garden_irrigation/garden-irrigation-card.js"
+CARD_FILENAME = "garden-irrigation-card.js"
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register websocket commands and serve the Lovelace card."""
+    async_register_websocket_commands(hass)
+    await _async_register_card(hass)
+    return True
+
+
+async def _async_register_card(hass: HomeAssistant) -> None:
+    """Serve the card JS and register it as a frontend module."""
+    card_path = Path(__file__).parent / "www" / CARD_FILENAME
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(CARD_URL, str(card_path), cache_headers=False)]
+    )
+
+    # Auto-load the card so users don't have to add a Lovelace resource manually.
+    try:
+        from homeassistant.components.frontend import add_extra_js_url
+
+        add_extra_js_url(hass, CARD_URL)
+    except ImportError:  # frontend not available (e.g. minimal install)
+        _LOGGER.debug("Frontend not available; add %s as a resource manually", CARD_URL)
 
 
 async def async_setup_entry(

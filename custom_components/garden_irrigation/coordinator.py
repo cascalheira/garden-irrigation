@@ -59,6 +59,7 @@ class RunState:
 
     task: asyncio.Task
     ends_at: datetime
+    source: str  # "manual" or "scheduled"
 
 
 def zone_from_subentry(subentry_id: str, data: dict[str, Any]) -> Zone:
@@ -81,7 +82,7 @@ class IrrigationController:
         self.hass = hass
         self.entry = entry
         self._running: dict[str, RunState] = {}
-        self._queue: list[tuple[str, int | None]] = []
+        self._queue: list[tuple[str, int | None, str]] = []
         self._unsub_time: list[Callable[[], None]] = []
 
     # ----- configuration helpers -------------------------------------------------
@@ -153,12 +154,14 @@ class IrrigationController:
         weekday = WEEKDAYS[dt_util.as_local(now).weekday()]
         if weekday not in days:
             return
-        self.hass.async_create_task(self.async_start_zone(zone_id))
+        self.hass.async_create_task(
+            self.async_start_zone(zone_id, source="scheduled")
+        )
 
     # ----- public control surface ------------------------------------------------
 
     async def async_start_zone(
-        self, zone_id: str, duration: int | None = None
+        self, zone_id: str, duration: int | None = None, source: str = "manual"
     ) -> None:
         """Start a zone now, or queue it in sequential mode if one is running."""
         zone = self.get_zone(zone_id)
@@ -171,11 +174,11 @@ class IrrigationController:
 
         if self.mode == MODE_SEQUENTIAL and self._running:
             if zone_id not in (q[0] for q in self._queue):
-                self._queue.append((zone_id, duration))
+                self._queue.append((zone_id, duration, source))
                 self._notify()
             return
 
-        self._start_task(zone_id, duration)
+        self._start_task(zone_id, duration, source)
 
     async def async_stop_zone(self, zone_id: str) -> None:
         """Stop a running zone and drop it from the queue."""
@@ -207,6 +210,11 @@ class IrrigationController:
         state = self._running.get(zone_id)
         return state.ends_at if state else None
 
+    def run_source(self, zone_id: str) -> str | None:
+        """Return 'manual'/'scheduled' for a running zone, else ``None``."""
+        state = self._running.get(zone_id)
+        return state.source if state else None
+
     def remaining_seconds(self, zone_id: str) -> int:
         """Return seconds left in the current run (0 if not running)."""
         ends_at = self.ends_at(zone_id)
@@ -224,7 +232,9 @@ class IrrigationController:
     # ----- internals -------------------------------------------------------------
 
     @callback
-    def _start_task(self, zone_id: str, duration: int | None) -> None:
+    def _start_task(
+        self, zone_id: str, duration: int | None, source: str
+    ) -> None:
         zone = self.zones[zone_id]
         minutes = duration if duration is not None else zone.duration
         seconds = int(minutes) * 60
@@ -234,6 +244,7 @@ class IrrigationController:
         self._running[zone_id] = RunState(
             task=task,
             ends_at=dt_util.utcnow() + timedelta(seconds=seconds),
+            source=source,
         )
         self._notify()
 
@@ -266,9 +277,9 @@ class IrrigationController:
     def _process_queue(self) -> None:
         if self._running or not self._queue:
             return
-        zone_id, duration = self._queue.pop(0)
+        zone_id, duration, source = self._queue.pop(0)
         if zone_id in self.zones:
-            self._start_task(zone_id, duration)
+            self._start_task(zone_id, duration, source)
 
     async def _set_switch(self, entity_id: str, turn_on: bool) -> None:
         await self.hass.services.async_call(
