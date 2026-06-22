@@ -9,6 +9,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.loader import async_get_integration
 
 from .const import DOMAIN, PLATFORMS, SERVICE_STOP_ALL
 from .coordinator import IrrigationController
@@ -32,15 +33,24 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def _async_register_card(hass: HomeAssistant) -> None:
     """Serve the card JS and register it as a frontend module."""
     card_path = Path(__file__).parent / "www" / CARD_FILENAME
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(CARD_URL, str(card_path), cache_headers=False)]
-    )
+    try:
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(CARD_URL, str(card_path), cache_headers=False)]
+        )
+    except RuntimeError:
+        # Already registered (e.g. integration reloaded without a restart).
+        _LOGGER.debug("Static path %s already registered", CARD_URL)
+
+    # Cache-bust the module URL by integration version so updates aren't stale.
+    integration = await async_get_integration(hass, DOMAIN)
+    versioned_url = f"{CARD_URL}?v={integration.version}"
 
     # Auto-load the card so users don't have to add a Lovelace resource manually.
     try:
         from homeassistant.components.frontend import add_extra_js_url
 
-        add_extra_js_url(hass, CARD_URL)
+        add_extra_js_url(hass, versioned_url)
+        _LOGGER.debug("Registered Lovelace card module at %s", versioned_url)
     except ImportError:  # frontend not available (e.g. minimal install)
         _LOGGER.debug("Frontend not available; add %s as a resource manually", CARD_URL)
 
