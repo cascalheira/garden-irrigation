@@ -1,0 +1,130 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Garden Irrigation",
+        "description": "Set up garden irrigation. After setup, add a zone for each switch/relay you want to control.",
+        "data": {
+          "mode": "Watering mode"
+        },
+        "data_description": {
+          "mode": "Sequential runs one zone at a time (others queue). Parallel lets zones run simultaneously."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Garden Irrigation is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Garden Irrigation options",
+        "data": {
+          "mode": "Watering mode"
+        },
+        "data_description": {
+          "mode": "Sequential runs one zone at a time (others queue). Parallel lets zones run simultaneously."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "zone": {
+      "title": "Zone",
+      "initiate_flow": {
+        "user": "Add zone",
+        "reconfigure": "Reconfigure zone"
+      },
+      "entry_type": "Zone",
+      "step": {
+        "settings": {
+          "title": "Zone settings",
+          "description": "Configure the switch this zone controls and how long it runs.",
+          "data": {
+            "name": "Zone name",
+            "switch_entity": "Switch / relay",
+            "duration": "Run duration (minutes)",
+            "pre_script": "Pre-irrigation script (optional)",
+            "post_script": "Post-irrigation script (optional)"
+          },
+          "data_description": {
+            "switch_entity": "The switch or input_boolean that opens this zone's valve.",
+            "duration": "How long the zone waters each run (1-60 minutes).",
+            "pre_script": "Script run and awaited before the valve opens (e.g. open main supply).",
+            "post_script": "Script run and awaited after the valve closes (e.g. notify, close supply)."
+          }
+        },
+        "menu": {
+          "title": "Zone configuration",
+          "description": "{summary}\n\n{warning}",
+          "menu_options": {
+            "settings": "Edit zone settings",
+            "add_schedule": "Add a schedule",
+            "remove_schedule": "Remove schedule(s)",
+            "finish": "Save zone"
+          }
+        },
+        "add_schedule": {
+          "title": "Add schedule",
+          "description": "Pick a start time and the days it should run. You can add several schedules per zone.",
+          "data": {
+            "time": "Start time",
+            "days": "Days"
+          }
+        },
+        "remove_schedule": {
+          "title": "Remove schedule(s)",
+          "description": "Select the schedules to delete.",
+          "data": {
+            "schedules": "Schedules"
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "Zone updated."
+      }
+    }
+  },
+  "selector": {
+    "mode": {
+      "options": {
+        "sequential": "Sequential (one zone at a time)",
+        "parallel": "Parallel (zones run together)"
+      }
+    }
+  },
+  "issues": {
+    "schedule_overlap": {
+      "title": "Overlapping irrigation schedules",
+      "description": "Some zones are scheduled to water at overlapping times. In sequential mode they will queue; in parallel mode they run together (which may reduce water pressure):\n\n{overlaps}"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "remaining": {
+        "name": "Time remaining"
+      }
+    }
+  },
+  "services": {
+    "start": {
+      "name": "Start zone",
+      "description": "Start watering a zone now, optionally overriding its default duration.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "Run time in minutes (1-60). Defaults to the zone's configured duration."
+        }
+      }
+    },
+    "stop": {
+      "name": "Stop zone",
+      "description": "Stop a running zone and remove it from the queue."
+    },
+    "stop_all": {
+      "name": "Stop all zones",
+      "description": "Immediately stop every running zone and clear the queue."
+    }
+  }
+}

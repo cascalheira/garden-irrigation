@@ -1,0 +1,32 @@
+start:
+  name: Start zone
+  description: Start watering a zone now, optionally overriding its default duration.
+  target:
+    entity:
+      integration: garden_irrigation
+      domain: switch
+  fields:
+    duration:
+      name: Duration
+      description: Run time in minutes (1-60). Defaults to the zone's configured duration.
+      required: false
+      example: 15
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: min
+          mode: box
+
+stop:
+  name: Stop zone
+  description: Stop a running zone and remove it from the queue.
+  target:
+    entity:
+      integration: garden_irrigation
+      domain: switch
+
+stop_all:
+  name: Stop all zones
+  description: Immediately stop every running zone and clear the queue.
