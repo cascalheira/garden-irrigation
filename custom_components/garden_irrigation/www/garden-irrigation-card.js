@@ -73,6 +73,10 @@ const STR = {
     disable: "Disable",
     skipIfRained: "Skip if it rained",
     skipIfForecast: "Skip if rain forecast",
+    tabZones: "Zones",
+    tabSchedule: "Schedule",
+    tabRain: "Rain",
+    specificHint: "Each zone has its own times — set them on the Zones tab.",
   },
   pt: {
     title: "Rega do jardim",
@@ -128,6 +132,10 @@ const STR = {
     disable: "Desativar",
     skipIfRained: "Ignorar se choveu",
     skipIfForecast: "Ignorar se houver previsão de chuva",
+    tabZones: "Zonas",
+    tabSchedule: "Agendamento",
+    tabRain: "Chuva",
+    specificHint: "Cada zona tem os seus próprios horários — defina-os no separador Zonas.",
   },
 };
 
@@ -222,7 +230,16 @@ const STYLES = `
     border-radius: 18px; box-shadow: 0 12px 48px rgba(0,0,0,.4);
     padding: 6px 18px 20px;
   }
-  .overlay-panel .header { position: sticky; top: 0; z-index: 2; background: inherit; padding-top: 12px; }
+  .overlay-panel .topbar { position: sticky; top: 0; z-index: 2; background: inherit; padding-top: 12px; }
+  .tabs { display: flex; gap: 4px; margin: 10px 0 0; border-bottom: 1px solid var(--divider-color); }
+  .tab {
+    border: none; background: transparent; border-radius: 0; padding: 10px 16px;
+    color: var(--secondary-text-color); font-weight: 600;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab:hover { background: transparent; color: var(--primary-text-color); }
+  .tab.on { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+  .tab-body { padding-top: 14px; }
 
   /* ---- View mode (compact, read-only) ---- */
   ha-card.view .header { padding-bottom: 8px; }
@@ -291,6 +308,7 @@ class GardenIrrigationCard extends HTMLElement {
     this._fetched = false;
     this._edit = false; // transient: true while building the edit overlay
     this._editOpen = false; // whether the edit overlay is shown
+    this._tab = "zones"; // active overlay tab: zones | schedule | rain
     this._selected = null;
     this._addZoneOpen = false;
     this._addSetupOpen = false;
@@ -389,6 +407,7 @@ class GardenIrrigationCard extends HTMLElement {
   _computeSig() {
     return JSON.stringify({
       editOpen: this._editOpen,
+      tab: this._tab,
       selected: this._selected,
       addZone: this._addZoneOpen,
       addSetup: this._addSetupOpen,
@@ -499,9 +518,82 @@ class GardenIrrigationCard extends HTMLElement {
     bg.addEventListener("click", () => this._closeEdit());
     const panel = document.createElement("div");
     panel.className = "overlay-panel";
-    this._fillCard(panel);
+    this._fillEditPanel(panel);
     overlay.append(bg, panel);
     return overlay;
+  }
+
+  _fillEditPanel(panel) {
+    const setup = this._currentSetup();
+
+    const top = document.createElement("div");
+    top.className = "topbar";
+    top.appendChild(this._buildHeader());
+    if (this._setups.length && setup) top.appendChild(this._buildTabBar());
+    panel.appendChild(top);
+
+    if (this._setups.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = this._t("noSetupsEdit");
+      panel.appendChild(empty);
+      if (this._addSetupOpen) panel.appendChild(this._buildAddSetupForm());
+      return;
+    }
+
+    if (this._addSetupOpen) panel.appendChild(this._buildAddSetupForm());
+    if (!setup) return;
+
+    const body = document.createElement("div");
+    body.className = "tab-body";
+
+    if (this._tab === "rain") {
+      body.appendChild(this._buildRainSkip(setup));
+    } else if (this._tab === "schedule") {
+      body.appendChild(this._buildSetupBar(setup));
+      if (setup.mode === "sequential") {
+        body.appendChild(this._buildSeqBar(setup));
+        body.appendChild(this._buildSeqScripts(setup));
+      } else {
+        const hint = document.createElement("div");
+        hint.className = "empty";
+        hint.textContent = this._t("specificHint");
+        body.appendChild(hint);
+      }
+    } else {
+      // zones
+      if (this._addZoneOpen) body.appendChild(this._buildAddZoneForm(setup));
+      if (setup.zones.length === 0 && !this._addZoneOpen) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = this._t("noZones");
+        body.appendChild(empty);
+      }
+      for (const zone of setup.zones)
+        body.appendChild(this._buildZone(setup, zone));
+    }
+
+    panel.appendChild(body);
+  }
+
+  _buildTabBar() {
+    const bar = document.createElement("div");
+    bar.className = "tabs";
+    [
+      ["zones", this._t("tabZones")],
+      ["schedule", this._t("tabSchedule")],
+      ["rain", this._t("tabRain")],
+    ].forEach(([id, label]) => {
+      const b = document.createElement("button");
+      b.className = "tab" + (this._tab === id ? " on" : "");
+      b.textContent = label;
+      b.addEventListener("click", () => {
+        this._tab = id;
+        this._rebuild();
+      });
+      bar.appendChild(b);
+    });
+    return bar;
   }
 
   _closeEdit() {
@@ -582,6 +674,7 @@ class GardenIrrigationCard extends HTMLElement {
       addZone.disabled = !setup;
       addZone.addEventListener("click", () => {
         this._addZoneOpen = !this._addZoneOpen;
+        this._tab = "zones";
         this._rebuild();
       });
       header.appendChild(addZone);
