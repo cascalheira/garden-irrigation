@@ -13,7 +13,8 @@ SUBENTRY_TYPE_ZONE = "zone"
 
 # Config / option keys
 CONF_MODE = "mode"  # scheduling mode of a setup: sequential | specific
-CONF_START_TIME = "start_time"  # sequential setups: when the chain starts
+CONF_START_TIME = "start_time"  # legacy single start time (migrated to start_times)
+CONF_START_TIMES = "start_times"  # sequential setups: list of {time, days}
 CONF_NAME = "name"
 CONF_SWITCH_ENTITY = "switch_entity"
 CONF_DURATION = "duration"  # minutes
@@ -50,6 +51,7 @@ WEEKDAY_LABELS = {
 
 # Repairs
 ISSUE_OVERLAP = "schedule_overlap"
+ISSUE_COLLISION = "start_collision"
 
 # Services
 SERVICE_STOP_ALL = "stop_all"

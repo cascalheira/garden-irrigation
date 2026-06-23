@@ -105,6 +105,9 @@ const STYLES = `
   .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary-color); }
   .seqbar.view { background: transparent; border-radius: 0; padding: 14px 6px 6px; margin: 0; color: var(--secondary-text-color); }
   .seqbar.view b { color: var(--primary-text-color); font-variant-numeric: tabular-nums; }
+  .seqedit { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin-top: 10px; }
+  .seqedit .lbl { color: var(--secondary-text-color); margin-right: 4px; }
+  .warn { color: var(--error-color); font-size: .85rem; margin-top: 8px; }
 `;
 
 class GardenIrrigationCard extends HTMLElement {
@@ -402,97 +405,186 @@ class GardenIrrigationCard extends HTMLElement {
     return wrap;
   }
 
+  _seqRunButton(setup) {
+    const anyRunning = setup.zones.some((z) => {
+      const st = this._stateFor(z);
+      return st && st.state === "on";
+    });
+    const run = document.createElement("button");
+    if (anyRunning) {
+      run.className = "stop";
+      run.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> Stop`;
+      run.addEventListener("click", () =>
+        this._ws({ type: "garden_irrigation/setup/stop", entry_id: setup.entry_id })
+      );
+    } else {
+      run.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> Run sequence`;
+      run.addEventListener("click", () =>
+        this._ws({ type: "garden_irrigation/setup/run", entry_id: setup.entry_id })
+      );
+    }
+    return run;
+  }
+
   _buildSeqBarView(setup) {
     const bar = document.createElement("div");
     bar.className = "seqbar view";
 
+    const times = (setup.start_times || []).map((s) => s.time);
+    const timesHtml = times.length
+      ? times.map((t) => `<b>${this._escape(t)}</b>`).join(", ")
+      : "<b>—</b>";
+    const dayText = this._uniformDaysText(setup.start_times);
+
     const txt = document.createElement("span");
-    txt.innerHTML = `Starts <b>${this._escape(setup.start_time)}</b> · ${this._escape(
-      this._formatDays(setup.days)
-    )}`;
+    txt.innerHTML = `Starts ${timesHtml}${
+      dayText ? " · " + this._escape(dayText) : ""
+    }`;
     bar.appendChild(txt);
 
     const spacer = document.createElement("div");
     spacer.style.flex = "1";
     bar.appendChild(spacer);
 
-    const anyRunning = setup.zones.some((z) => {
-      const st = this._stateFor(z);
-      return st && st.state === "on";
-    });
-    const run = document.createElement("button");
-    if (anyRunning) {
-      run.className = "stop";
-      run.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> Stop`;
-      run.addEventListener("click", () =>
-        this._ws({ type: "garden_irrigation/setup/stop", entry_id: setup.entry_id })
-      );
-    } else {
-      run.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> Run sequence`;
-      run.addEventListener("click", () =>
-        this._ws({ type: "garden_irrigation/setup/run", entry_id: setup.entry_id })
-      );
-    }
-    bar.appendChild(run);
+    bar.appendChild(this._seqRunButton(setup));
     return bar;
   }
 
   _buildSeqBarEdit(setup) {
-    const bar = document.createElement("div");
-    bar.className = "seq-bar";
+    const box = document.createElement("div");
+    box.className = "seqedit";
+
+    const chips = document.createElement("div");
+    chips.className = "chips";
 
     const lbl = document.createElement("span");
     lbl.className = "lbl";
-    lbl.textContent = "Starts at";
-    bar.appendChild(lbl);
+    lbl.textContent = "Starts:";
+    chips.appendChild(lbl);
 
-    const time = this._make24hTime(setup.start_time, (v) =>
-      this._updateSetup(setup.entry_id, { start_time: v })
-    );
-    bar.appendChild(time.wrap);
-
-    const on = document.createElement("span");
-    on.className = "lbl";
-    on.textContent = "on";
-    bar.appendChild(on);
-
-    if (this._edit) {
-      const days = this._makeDaysEditor(setup.days, true, (d) =>
-        this._updateSetup(setup.entry_id, { days: d.length ? d : WEEKDAYS })
-      );
-      bar.appendChild(days.wrap);
-    } else {
-      const ds = document.createElement("span");
-      ds.className = "days-static";
-      ds.textContent = this._formatDays(setup.days);
-      bar.appendChild(ds);
+    const starts = setup.start_times || [];
+    if (starts.length === 0) {
+      const none = document.createElement("span");
+      none.className = "no-sched";
+      none.textContent = "No start times";
+      chips.appendChild(none);
     }
+    starts.forEach((s, index) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `<ha-icon icon="mdi:clock-outline"></ha-icon><span>${this._escape(
+        s.time
+      )}</span><span class="x" title="Remove">✕</span>`;
+      chip
+        .querySelector(".x")
+        .addEventListener("click", () => this._removeStartTime(setup, index));
+      chips.appendChild(chip);
+    });
+
+    const time = this._make24hTime("06:00", null);
+    chips.appendChild(time.wrap);
+    const add = document.createElement("button");
+    add.textContent = "Add";
+    add.addEventListener("click", () => this._addStartTime(setup, time.get()));
+    chips.appendChild(add);
 
     const spacer = document.createElement("div");
     spacer.style.flex = "1";
-    bar.appendChild(spacer);
+    chips.appendChild(spacer);
+    chips.appendChild(this._seqRunButton(setup));
 
-    // Run / stop the whole sequence.
-    const anyRunning = setup.zones.some((z) => {
-      const st = this._stateFor(z);
-      return st && st.state === "on";
-    });
-    const run = document.createElement("button");
-    if (anyRunning) {
-      run.className = "stop";
-      run.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> Stop`;
-      run.addEventListener("click", () =>
-        this._ws({ type: "garden_irrigation/setup/stop", entry_id: setup.entry_id })
-      );
-    } else {
-      run.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> Run sequence`;
-      run.addEventListener("click", () =>
-        this._ws({ type: "garden_irrigation/setup/run", entry_id: setup.entry_id })
-      );
+    box.appendChild(chips);
+
+    const collisions = this._startCollisions(setup);
+    if (collisions.length) {
+      const warn = document.createElement("div");
+      warn.className = "warn";
+      warn.textContent = `⚠️ Colliding start times (sequence runs ${setup.total_duration} min): ${collisions.join(
+        "; "
+      )}`;
+      box.appendChild(warn);
     }
-    bar.appendChild(run);
 
-    return bar;
+    return box;
+  }
+
+  _uniformDaysText(starts) {
+    if (!starts || !starts.length) return "";
+    const norm = (s) =>
+      (s.days && s.days.length ? [...s.days] : [...WEEKDAYS]).sort().join(",");
+    const first = norm(starts[0]);
+    if (starts.every((s) => norm(s) === first))
+      return this._formatDays(starts[0].days);
+    return "";
+  }
+
+  _startCollisions(setup, extra) {
+    const total = setup.total_duration || 0;
+    if (total <= 0) return [];
+    const list = (setup.start_times || []).slice();
+    if (extra) list.push(extra);
+    const windows = [];
+    for (const s of list) {
+      const [h, m] = s.time.split(":").map(Number);
+      const start = h * 60 + m;
+      const days = s.days && s.days.length ? s.days : WEEKDAYS;
+      for (const d of days) windows.push([d, start, s.time]);
+    }
+    const seen = new Set();
+    const out = [];
+    for (let i = 0; i < windows.length; i++) {
+      for (let j = i + 1; j < windows.length; j++) {
+        const [da, sa, ta] = windows[i];
+        const [db, sb, tb] = windows[j];
+        if (da !== db) continue;
+        if (Math.abs(sa - sb) < total) {
+          const key = [ta, tb].sort().join("|") + da;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(`${ta} and ${tb} on ${DAY_LABEL[da] || da}`);
+        }
+      }
+    }
+    return out;
+  }
+
+  async _addStartTime(setup, time) {
+    const introduced = this._startCollisions(setup, {
+      time,
+      days: WEEKDAYS,
+    }).filter((c) => !this._startCollisions(setup).includes(c));
+    if (introduced.length) {
+      this._toast(
+        `Start time collides (sequence runs ${setup.total_duration} min): ${introduced.join(
+          "; "
+        )}`
+      );
+      return;
+    }
+    try {
+      await this._ws({
+        type: "garden_irrigation/setup/start_time/add",
+        entry_id: setup.entry_id,
+        time,
+        days: WEEKDAYS,
+      });
+      await this._fetch();
+    } catch (err) {
+      this._toast(`Could not add start time: ${err.message || err}`);
+    }
+  }
+
+  async _removeStartTime(setup, index) {
+    try {
+      await this._ws({
+        type: "garden_irrigation/setup/start_time/remove",
+        entry_id: setup.entry_id,
+        index,
+      });
+      await this._fetch();
+    } catch (err) {
+      this._toast(`Could not remove start time: ${err.message || err}`);
+    }
   }
 
   _buildZone(setup, zone) {

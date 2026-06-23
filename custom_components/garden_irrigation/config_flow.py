@@ -31,6 +31,7 @@ from .const import (
     CONF_PRE_SCRIPT,
     CONF_SCHEDULES,
     CONF_START_TIME,
+    CONF_START_TIMES,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
     DEFAULT_DURATION,
@@ -46,7 +47,7 @@ from .const import (
     WEEKDAYS,
     WEEKDAY_LABELS,
 )
-from .util import compute_overlaps, format_days
+from .util import compute_overlaps, compute_start_collisions, format_days
 
 MODE_SELECTOR = selector.SelectSelector(
     selector.SelectSelectorConfig(
@@ -167,10 +168,12 @@ class GardenIrrigationConfigFlow(ConfigFlow, domain=DOMAIN):
         name = self._setup.get(CONF_NAME, "Garden")
         options: dict[str, Any] = {CONF_MODE: self._setup.get(CONF_MODE, DEFAULT_MODE)}
         if options[CONF_MODE] == MODE_SEQUENTIAL:
-            options[CONF_START_TIME] = self._setup.get(
-                CONF_START_TIME, DEFAULT_START_TIME
-            )
-            options[CONF_DAYS] = self._setup.get(CONF_DAYS, list(WEEKDAYS))
+            options[CONF_START_TIMES] = [
+                {
+                    CONF_TIME: self._setup.get(CONF_START_TIME, DEFAULT_START_TIME)[:5],
+                    CONF_DAYS: self._setup.get(CONF_DAYS, list(WEEKDAYS)),
+                }
+            ]
             if self._setup.get(CONF_PRE_SCRIPT):
                 options[CONF_PRE_SCRIPT] = self._setup[CONF_PRE_SCRIPT]
             if self._setup.get(CONF_POST_SCRIPT):
@@ -191,45 +194,169 @@ class GardenIrrigationConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(OptionsFlow):
-    """Edit a setup's scheduling mode and (for sequential) start time/days."""
+    """Edit a setup: scheduling mode, sequential start times (multiple) and scripts."""
+
+    def __init__(self) -> None:
+        self._opts: dict[str, Any] = {}
+        self._starts: list[dict[str, Any]] = []
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        options = self.config_entry.options
+        self._opts = dict(self.config_entry.options)
+        self._starts = _starts_from_options(self._opts)
+        return await self.async_step_menu()
+
+    async def async_step_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if self._opts.get(CONF_MODE, DEFAULT_MODE) != MODE_SEQUENTIAL:
+            # Specific setups have no setup-level start times/scripts to manage.
+            return await self.async_step_settings()
+
+        menu_options = ["settings", "add_start"]
+        if self._starts:
+            menu_options.append("remove_start")
+        menu_options.append("finish")
+        return self.async_show_menu(
+            step_id="menu",
+            menu_options=menu_options,
+            description_placeholders={
+                "summary": self._summary(),
+                "warning": self._warning(),
+            },
+        )
+
+    async def async_step_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         if user_input is not None:
-            new_options: dict[str, Any] = {CONF_MODE: user_input[CONF_MODE]}
-            if user_input[CONF_MODE] == MODE_SEQUENTIAL:
-                new_options[CONF_START_TIME] = user_input.get(
-                    CONF_START_TIME, DEFAULT_START_TIME
-                )
-                new_options[CONF_DAYS] = user_input.get(CONF_DAYS, list(WEEKDAYS))
-                if user_input.get(CONF_PRE_SCRIPT):
-                    new_options[CONF_PRE_SCRIPT] = user_input[CONF_PRE_SCRIPT]
-                if user_input.get(CONF_POST_SCRIPT):
-                    new_options[CONF_POST_SCRIPT] = user_input[CONF_POST_SCRIPT]
-            return self.async_create_entry(data=new_options)
+            self._opts[CONF_MODE] = user_input[CONF_MODE]
+            for key in (CONF_PRE_SCRIPT, CONF_POST_SCRIPT):
+                if user_input.get(key):
+                    self._opts[key] = user_input[key]
+                else:
+                    self._opts.pop(key, None)
+            if user_input[CONF_MODE] != MODE_SEQUENTIAL:
+                return await self.async_step_finish()
+            return await self.async_step_menu()
 
         schema = vol.Schema(
             {
                 vol.Required(
-                    CONF_MODE, default=options.get(CONF_MODE, DEFAULT_MODE)
+                    CONF_MODE, default=self._opts.get(CONF_MODE, DEFAULT_MODE)
                 ): MODE_SELECTOR,
-                vol.Optional(
-                    CONF_START_TIME,
-                    default=options.get(CONF_START_TIME, DEFAULT_START_TIME),
-                ): selector.TimeSelector(),
-                vol.Optional(
-                    CONF_DAYS, default=options.get(CONF_DAYS, list(WEEKDAYS))
-                ): DAYS_SELECTOR,
                 vol.Optional(CONF_PRE_SCRIPT): SCRIPT_SELECTOR,
                 vol.Optional(CONF_POST_SCRIPT): SCRIPT_SELECTOR,
             }
         )
         return self.async_show_form(
-            step_id="init",
-            data_schema=self.add_suggested_values_to_schema(schema, options),
+            step_id="settings",
+            data_schema=self.add_suggested_values_to_schema(schema, self._opts),
         )
+
+    async def async_step_add_start(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._starts.append(
+                {CONF_TIME: user_input[CONF_TIME][:5], CONF_DAYS: user_input[CONF_DAYS]}
+            )
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="add_start",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_TIME, default=DEFAULT_START_TIME
+                    ): selector.TimeSelector(),
+                    vol.Required(CONF_DAYS, default=list(WEEKDAYS)): DAYS_SELECTOR,
+                }
+            ),
+        )
+
+    async def async_step_remove_start(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            for index in sorted(
+                (int(i) for i in user_input[CONF_START_TIMES]), reverse=True
+            ):
+                if 0 <= index < len(self._starts):
+                    del self._starts[index]
+            return await self.async_step_menu()
+
+        options = [
+            selector.SelectOptionDict(
+                value=str(index),
+                label=f"{s[CONF_TIME]} — {format_days(s.get(CONF_DAYS, []))}",
+            )
+            for index, s in enumerate(self._starts)
+        ]
+        return self.async_show_form(
+            step_id="remove_start",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_START_TIMES): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=options,
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        new_options: dict[str, Any] = {CONF_MODE: self._opts.get(CONF_MODE, DEFAULT_MODE)}
+        if new_options[CONF_MODE] == MODE_SEQUENTIAL:
+            new_options[CONF_START_TIMES] = self._starts or [
+                {CONF_TIME: DEFAULT_START_TIME, CONF_DAYS: list(WEEKDAYS)}
+            ]
+            for key in (CONF_PRE_SCRIPT, CONF_POST_SCRIPT):
+                if self._opts.get(key):
+                    new_options[key] = self._opts[key]
+        return self.async_create_entry(data=new_options)
+
+    def _summary(self) -> str:
+        if not self._starts:
+            return "No start times yet."
+        lines = ["Start times:"]
+        lines.extend(
+            f"• {s[CONF_TIME]} — {format_days(s.get(CONF_DAYS, []))}"
+            for s in self._starts
+        )
+        return "\n".join(lines)
+
+    def _warning(self) -> str:
+        total = sum(
+            int(sub.data.get(CONF_DURATION, 0))
+            for sub in self.config_entry.subentries.values()
+            if sub.subentry_type == SUBENTRY_TYPE_ZONE
+        )
+        collisions = compute_start_collisions(self._starts, total)
+        if not collisions:
+            return ""
+        return "⚠️ Colliding start times (sequence is " + str(total) + " min):\n" + "\n".join(
+            f"• {c}" for c in collisions
+        )
+
+
+def _starts_from_options(options: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the sequential start times, migrating a legacy single time."""
+    times = options.get(CONF_START_TIMES)
+    if times:
+        return [dict(s) for s in times]
+    legacy = options.get(CONF_START_TIME)
+    if legacy:
+        return [
+            {CONF_TIME: legacy[:5], CONF_DAYS: options.get(CONF_DAYS, list(WEEKDAYS))}
+        ]
+    return []
 
 
 class ZoneSubentryFlowHandler(ConfigSubentryFlow):

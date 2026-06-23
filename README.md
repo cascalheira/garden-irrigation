@@ -10,8 +10,10 @@ and services — no YAML required.
   "Garden" and "Trees"). Each setup is a config entry with its own zones and
   scheduling mode.
 - **Two scheduling modes per setup:**
-  - **Sequential** — one start time + days for the setup; zones run back-to-back
-    in order (one cancellable chain).
+  - **Sequential** — one or more setup start times + days; zones run back-to-back
+    in order (one cancellable chain). Start times must be at least the full
+    sequence length apart — collisions are blocked when adding and flagged with a
+    discreet warning + repair issue.
   - **Specific times** — each zone has its own schedules (multiple times/days);
     zones may overlap.
 - **Multiple zones**, each mapped to a `switch` (or `input_boolean`) and a run

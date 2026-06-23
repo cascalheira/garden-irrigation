@@ -75,6 +75,47 @@ def _zone_windows(zone: dict[str, Any]):
                 yield day, start, end, label
 
 
+def compute_start_collisions(
+    start_times: list[dict[str, Any]], total_minutes: int
+) -> list[str]:
+    """Return descriptions of sequential start times that would collide.
+
+    A sequence started at time ``T`` occupies ``[T, T + total_minutes)``. Two
+    starts collide when they share a weekday and their windows intersect, i.e.
+    they are closer together than the full sequence length.
+    """
+    if total_minutes <= 0:
+        return []
+
+    windows = []
+    for sched in start_times:
+        hour, minute = parse_time(sched[CONF_TIME])
+        start = hour * 60 + minute
+        days = sched.get(CONF_DAYS) or WEEKDAYS
+        label = sched[CONF_TIME][:5]
+        for day in days:
+            if day in WEEKDAYS:
+                windows.append((day, start, label))
+
+    seen: set[tuple[str, str, str]] = set()
+    collisions: list[str] = []
+    for i in range(len(windows)):
+        day_a, start_a, label_a = windows[i]
+        for j in range(i + 1, len(windows)):
+            day_b, start_b, label_b = windows[j]
+            if day_a != day_b:
+                continue
+            if abs(start_a - start_b) < total_minutes:
+                key = tuple(sorted((label_a, label_b)) + [day_a])
+                if key in seen:
+                    continue
+                seen.add(key)
+                collisions.append(
+                    f"{label_a} and {label_b} on {WEEKDAY_LABELS[day_a]}"
+                )
+    return collisions
+
+
 def compute_overlaps(zones: list[dict[str, Any]]) -> list[str]:
     """Return human readable descriptions of schedules whose run windows overlap.
 

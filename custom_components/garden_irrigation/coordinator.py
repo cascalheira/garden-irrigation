@@ -35,19 +35,25 @@ from .const import (
     CONF_PRE_SCRIPT,
     CONF_SCHEDULES,
     CONF_START_TIME,
+    CONF_START_TIMES,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
     DEFAULT_DURATION,
     DEFAULT_MODE,
-    DEFAULT_START_TIME,
     DOMAIN,
+    ISSUE_COLLISION,
     ISSUE_OVERLAP,
     MODE_SEQUENTIAL,
     SIGNAL_UPDATE,
     SUBENTRY_TYPE_ZONE,
     WEEKDAYS,
 )
-from .util import compute_next_run, compute_overlaps, parse_time
+from .util import (
+    compute_next_run,
+    compute_overlaps,
+    compute_start_collisions,
+    parse_time,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -105,14 +111,28 @@ class IrrigationController:
         return self.entry.options.get(CONF_MODE, DEFAULT_MODE)
 
     @property
-    def start_time(self) -> str:
-        """Return the sequential start time 'HH:MM'."""
-        return self.entry.options.get(CONF_START_TIME, DEFAULT_START_TIME)
+    def days(self) -> list[str]:
+        """Return the days the sequential chain runs (legacy single-time setups)."""
+        return self.entry.options.get(CONF_DAYS) or list(WEEKDAYS)
 
     @property
-    def days(self) -> list[str]:
-        """Return the days the sequential chain runs."""
-        return self.entry.options.get(CONF_DAYS) or list(WEEKDAYS)
+    def start_schedules(self) -> list[dict[str, Any]]:
+        """Return the sequential start times as a list of {time, days}.
+
+        Migrates a legacy single ``start_time``/``days`` option on read.
+        """
+        times = self.entry.options.get(CONF_START_TIMES)
+        if times:
+            return list(times)
+        legacy = self.entry.options.get(CONF_START_TIME)
+        if legacy:
+            return [{CONF_TIME: legacy, CONF_DAYS: self.days}]
+        return []
+
+    @property
+    def total_duration(self) -> int:
+        """Total minutes the full sequence takes (sum of zone durations)."""
+        return sum(z.duration for z in self.zones.values())
 
     @property
     def pre_script(self) -> str | None:
@@ -169,12 +189,17 @@ class IrrigationController:
         self._unsub_time.clear()
 
         if self.mode == MODE_SEQUENTIAL:
-            hour, minute = parse_time(self.start_time)
-            self._unsub_time.append(
-                async_track_time_change(
-                    self.hass, self._sequential_trigger, hour=hour, minute=minute, second=0
+            for sched in self.start_schedules:
+                hour, minute = parse_time(sched[CONF_TIME])
+                self._unsub_time.append(
+                    async_track_time_change(
+                        self.hass,
+                        partial(self._sequential_trigger, sched),
+                        hour=hour,
+                        minute=minute,
+                        second=0,
+                    )
                 )
-            )
             return
 
         for zone in self.zones.values():
@@ -191,10 +216,11 @@ class IrrigationController:
                 )
 
     @callback
-    def _sequential_trigger(self, now: datetime) -> None:
-        """Fire at the setup start time; run the whole chain if today matches."""
+    def _sequential_trigger(self, sched: dict[str, Any], now: datetime) -> None:
+        """Fire at a setup start time; run the whole chain if today matches."""
+        days = sched.get(CONF_DAYS) or WEEKDAYS
         weekday = WEEKDAYS[dt_util.as_local(now).weekday()]
-        if weekday not in self.days:
+        if weekday not in days:
             return
         self.async_run_chain()
 
@@ -284,7 +310,7 @@ class IrrigationController:
         if zone is None:
             return None
         if self.mode == MODE_SEQUENTIAL:
-            schedules = [{CONF_TIME: self.start_time, CONF_DAYS: self.days}]
+            schedules = self.start_schedules
         else:
             schedules = zone.schedules
         if not schedules:
@@ -371,12 +397,34 @@ class IrrigationController:
 
     @callback
     def _update_overlap_issue(self) -> None:
-        """Raise/clear the overlap repair issue (only meaningful in specific mode)."""
-        issue_id = f"{ISSUE_OVERLAP}_{self.entry.entry_id}"
+        """Raise/clear the repair issue for overlaps (specific) or start collisions (sequential)."""
+        overlap_id = f"{ISSUE_OVERLAP}_{self.entry.entry_id}"
+        collision_id = f"{ISSUE_COLLISION}_{self.entry.entry_id}"
+
         if self.mode == MODE_SEQUENTIAL:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            ir.async_delete_issue(self.hass, DOMAIN, overlap_id)
+            collisions = compute_start_collisions(
+                self.start_schedules, self.total_duration
+            )
+            if collisions:
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    collision_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key=ISSUE_COLLISION,
+                    translation_placeholders={
+                        "setup": self.entry.title,
+                        "collisions": "\n".join(f"• {c}" for c in collisions),
+                    },
+                )
+            else:
+                ir.async_delete_issue(self.hass, DOMAIN, collision_id)
             return
 
+        ir.async_delete_issue(self.hass, DOMAIN, collision_id)
+        issue_id = overlap_id
         zone_dicts = [
             {
                 CONF_NAME: z.name,

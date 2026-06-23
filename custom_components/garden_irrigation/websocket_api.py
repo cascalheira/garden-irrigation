@@ -26,6 +26,7 @@ from .const import (
     CONF_PRE_SCRIPT,
     CONF_SCHEDULES,
     CONF_START_TIME,
+    CONF_START_TIMES,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
     DEFAULT_DURATION,
@@ -50,6 +51,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         ws_add_setup,
         ws_update_setup,
         ws_delete_setup,
+        ws_add_start_time,
+        ws_remove_start_time,
         ws_run_setup,
         ws_stop_setup,
         ws_add_zone,
@@ -91,6 +94,18 @@ def _zone_payload(
 
 
 @callback
+def _start_times(options: Any) -> list[dict[str, Any]]:
+    """Return sequential start times, migrating a legacy single start_time."""
+    times = options.get(CONF_START_TIMES)
+    if times:
+        return [dict(s) for s in times]
+    legacy = options.get(CONF_START_TIME)
+    if legacy:
+        return [{CONF_TIME: legacy[:5], CONF_DAYS: options.get(CONF_DAYS, list(WEEKDAYS))}]
+    return []
+
+
+@callback
 def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
     options = entry.options
     zones = [
@@ -102,10 +117,14 @@ def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         "entry_id": entry.entry_id,
         "name": entry.title,
         "mode": options.get(CONF_MODE, DEFAULT_MODE),
-        "start_time": options.get(CONF_START_TIME, DEFAULT_START_TIME),
-        "days": options.get(CONF_DAYS, list(WEEKDAYS)),
+        "start_times": _start_times(options),
         "pre_script": options.get(CONF_PRE_SCRIPT),
         "post_script": options.get(CONF_POST_SCRIPT),
+        "total_duration": sum(
+            int(sub.data.get(CONF_DURATION, DEFAULT_DURATION))
+            for sub in entry.subentries.values()
+            if sub.subentry_type == SUBENTRY_TYPE_ZONE
+        ),
         "zones": zones,
     }
 
@@ -229,6 +248,65 @@ async def ws_delete_setup(
         return
     await hass.config_entries.async_remove(msg["entry_id"])
     connection.send_result(msg["id"], {"entry_id": msg["entry_id"]})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/setup/start_time/add",
+        vol.Required("entry_id"): str,
+        vol.Required("time"): TIME_RE,
+        vol.Optional("days", default=list(WEEKDAYS)): [vol.In(WEEKDAYS)],
+    }
+)
+@callback
+def ws_add_start_time(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Append a start time to a sequential setup."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown setup")
+        return
+    options = dict(entry.options)
+    starts = _start_times(options)
+    starts.append({CONF_TIME: msg["time"][:5], CONF_DAYS: msg["days"] or list(WEEKDAYS)})
+    options[CONF_START_TIMES] = starts
+    options.pop(CONF_START_TIME, None)
+    hass.config_entries.async_update_entry(entry, options=options)
+    connection.send_result(msg["id"], _setup_payload(hass, entry))
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/setup/start_time/remove",
+        vol.Required("entry_id"): str,
+        vol.Required("index"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    }
+)
+@callback
+def ws_remove_start_time(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Remove a start time from a sequential setup by index."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown setup")
+        return
+    options = dict(entry.options)
+    starts = _start_times(options)
+    index = msg["index"]
+    if 0 <= index < len(starts):
+        del starts[index]
+    options[CONF_START_TIMES] = starts
+    options.pop(CONF_START_TIME, None)
+    hass.config_entries.async_update_entry(entry, options=options)
+    connection.send_result(msg["id"], _setup_payload(hass, entry))
 
 
 @websocket_api.require_admin

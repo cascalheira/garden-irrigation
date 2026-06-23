@@ -30,15 +30,38 @@
   },
   "options": {
     "step": {
-      "init": {
+      "menu": {
         "title": "Setup options",
-        "description": "Choose the scheduling mode. Start time, days and pre/post scripts apply only to sequential setups.",
+        "description": "{summary}\n\n{warning}",
+        "menu_options": {
+          "settings": "Scheduling mode & scripts",
+          "add_start": "Add a start time",
+          "remove_start": "Remove start time(s)",
+          "finish": "Save"
+        }
+      },
+      "settings": {
+        "title": "Scheduling mode & scripts",
+        "description": "Specific setups schedule each zone separately. Sequential setups run all zones in order from the start time(s) below; the scripts run once around the whole sequence.",
         "data": {
           "mode": "Scheduling mode",
-          "start_time": "Start time (sequential)",
-          "days": "Days (sequential)",
           "pre_script": "Pre-irrigation script (sequential)",
           "post_script": "Post-irrigation script (sequential)"
+        }
+      },
+      "add_start": {
+        "title": "Add start time",
+        "description": "Add a time of day for the whole sequence to run, and the days it applies. Times must be at least the full sequence length apart so runs don't collide.",
+        "data": {
+          "time": "Start time",
+          "days": "Days"
+        }
+      },
+      "remove_start": {
+        "title": "Remove start time(s)",
+        "description": "Select the start times to delete.",
+        "data": {
+          "start_times": "Start times"
         }
       }
     }
@@ -112,6 +135,10 @@
     "schedule_overlap": {
       "title": "Overlapping irrigation schedules",
       "description": "In the “{setup}” setup, some zones are scheduled to water at overlapping times (they will run together):\n\n{overlaps}"
+    },
+    "start_collision": {
+      "title": "Colliding sequential start times",
+      "description": "In the “{setup}” setup, some start times are closer together than the full sequence length, so the runs would collide:\n\n{collisions}"
     }
   },
   "entity": {
