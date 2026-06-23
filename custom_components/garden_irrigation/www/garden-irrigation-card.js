@@ -190,8 +190,6 @@ const STYLES = `
   .zone-name { font-size: 1.15rem; font-weight: 700; color: var(--primary-text-color); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .zone-name input { font: inherit; font-weight: 700; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); }
   .zone-sub { font-family: var(--code-font-family, monospace); color: var(--secondary-text-color); font-size: .9rem; margin-top: 4px; }
-  .badge { display: inline-flex; align-items: center; gap: 5px; background: var(--primary-color); color: var(--text-primary-color,#fff); border-radius: 999px; padding: 3px 10px; font-size: .8rem; font-weight: 600; opacity: .92; }
-  .badge ha-icon { --mdc-icon-size: 15px; }
   .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
   .row .label { width: 86px; color: var(--primary-text-color); font-weight: 500; }
   input[type="range"] { flex: 1; accent-color: var(--primary-color); height: 4px; }
@@ -1248,14 +1246,7 @@ class GardenIrrigationCard extends HTMLElement {
       n.textContent = zone.name;
       nameRow.appendChild(n);
     }
-    const badge = document.createElement("span");
-    badge.className = "badge";
-    badge.hidden = true;
-    badge.innerHTML = `<ha-icon icon="mdi:water"></ha-icon><span class="badge-text"></span>`;
-    nameRow.appendChild(badge);
     titles.appendChild(nameRow);
-    refs.badge = badge;
-    refs.badgeText = badge.querySelector(".badge-text");
 
     // Switch line — shown in edit mode (editable picker), hidden in view.
     if (this._edit) {
@@ -1507,13 +1498,7 @@ class GardenIrrigationCard extends HTMLElement {
         continue;
       }
 
-      // edit mode (configuration only — no run/stop, no countdown)
-      if (running) {
-        refs.badge.hidden = false;
-        refs.badgeText.textContent = `${this._t("watering")} · ${this._t(source)}`;
-      } else {
-        refs.badge.hidden = true;
-      }
+      // edit mode (configuration only — no run/stop, no countdown, no badge)
       if (this.shadowRoot.activeElement !== refs.slider) {
         refs.slider.value = String(zone.duration);
         refs.durVal.textContent = `${zone.duration} min`;
