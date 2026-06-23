@@ -9,11 +9,97 @@
  */
 
 const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-const DAY_SHORT = { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" };
-const DAY_LABEL = {
-  mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday",
-  fri: "Friday", sat: "Saturday", sun: "Sunday",
+const DAY_SHORT = {
+  en: { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" },
+  pt: { mon: "S", tue: "T", wed: "Q", thu: "Q", fri: "S", sat: "S", sun: "D" },
 };
+const DAY_LABEL = {
+  en: { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" },
+  pt: { mon: "Segunda", tue: "Terça", wed: "Quarta", thu: "Quinta", fri: "Sexta", sat: "Sábado", sun: "Domingo" },
+};
+
+const STR = {
+  en: {
+    title: "Garden watering",
+    edit: "Edit", done: "Done", addZone: "Add zone", addSetup: "Add setup",
+    run: "Run", stop: "Stop", runSequence: "Run sequence",
+    starts: "Starts", startsLabel: "Starts:", scheduling: "Scheduling:",
+    sequential: "Sequential", specific: "Specific times",
+    deleteSetup: "Delete setup", deleteZone: "Delete zone",
+    noStartTimes: "No start times", noSchedules: "No schedules",
+    schedulesLabel: "Schedules", add: "Add", duration: "Duration",
+    preScript: "Pre-irrigation script", postScript: "Post-irrigation script",
+    preScriptShort: "Pre-script", postScriptShort: "Post-script", switchRelay: "Switch / relay",
+    scheduled: "scheduled", manual: "manual", watering: "Watering", everyDay: "every day",
+    noSetupsEdit: "No setups yet. Use “Add setup” to create one (e.g. Garden, Trees).",
+    noSetupsView: "No irrigation setups. Switch to edit mode to add one.",
+    noZones: "No zones yet.",
+    zoneName: "Zone name", zoneNamePh: "e.g. Front lawn",
+    durationMinutes: "Duration (minutes)", cancel: "Cancel", saveZone: "Save zone",
+    setupName: "Setup name", setupNamePh: "e.g. Trees", schedulingMode: "Scheduling mode",
+    startDays: "Start time & days", createSetup: "Create setup", renameSetup: "Rename setup",
+    runsNth: (n) => `runs ${ordinalEn(n)}`,
+    confirmDelZone: (n) => `Delete zone “${n}”?`,
+    confirmDelSetup: (n) => `Delete the whole “${n}” setup and its zones?`,
+    needNameSwitch: "Enter a name and pick a switch.",
+    needSetupName: "Enter a setup name.",
+    entityNotReady: "Zone entity not ready yet.",
+    collides: (t, l) => `Start time collides (sequence runs ${t} min): ${l}`,
+    collisionWarn: (t, l) => `⚠️ Colliding start times (sequence runs ${t} min): ${l}`,
+    actionFailed: (e) => `Action failed: ${e}`,
+    addZoneFail: (e) => `Could not add zone: ${e}`,
+    addSetupFail: (e) => `Could not add setup: ${e}`,
+    updateFail: (e) => `Update failed: ${e}`,
+    deleteFail: (e) => `Delete failed: ${e}`,
+    addStartFail: (e) => `Could not add start time: ${e}`,
+    removeStartFail: (e) => `Could not remove start time: ${e}`,
+    addSchedFail: (e) => `Could not add schedule: ${e}`,
+    removeSchedFail: (e) => `Could not remove schedule: ${e}`,
+  },
+  pt: {
+    title: "Rega do jardim",
+    edit: "Editar", done: "Concluir", addZone: "Adicionar zona", addSetup: "Adicionar conjunto",
+    run: "Regar", stop: "Parar", runSequence: "Correr sequência",
+    starts: "Começa", startsLabel: "Começa:", scheduling: "Agendamento:",
+    sequential: "Sequencial", specific: "Horas específicas",
+    deleteSetup: "Eliminar conjunto", deleteZone: "Eliminar zona",
+    noStartTimes: "Sem horas de início", noSchedules: "Sem agendamentos",
+    schedulesLabel: "Agendamentos", add: "Adicionar", duration: "Duração",
+    preScript: "Script de pré-rega", postScript: "Script de pós-rega",
+    preScriptShort: "Script pré", postScriptShort: "Script pós", switchRelay: "Interruptor / relé",
+    scheduled: "agendada", manual: "manual", watering: "A regar", everyDay: "todos os dias",
+    noSetupsEdit: "Ainda não há conjuntos. Use “Adicionar conjunto” para criar um (por ex. Jardim, Árvores).",
+    noSetupsView: "Sem conjuntos de rega. Mude para o modo de edição para adicionar um.",
+    noZones: "Ainda não há zonas.",
+    zoneName: "Nome da zona", zoneNamePh: "por ex. Relvado da frente",
+    durationMinutes: "Duração (minutos)", cancel: "Cancelar", saveZone: "Guardar zona",
+    setupName: "Nome do conjunto", setupNamePh: "por ex. Árvores", schedulingMode: "Modo de agendamento",
+    startDays: "Hora de início e dias", createSetup: "Criar conjunto", renameSetup: "Renomear conjunto",
+    runsNth: (n) => `corre ${n}.º`,
+    confirmDelZone: (n) => `Eliminar a zona “${n}”?`,
+    confirmDelSetup: (n) => `Eliminar todo o conjunto “${n}” e as suas zonas?`,
+    needNameSwitch: "Introduza um nome e escolha um interruptor.",
+    needSetupName: "Introduza um nome para o conjunto.",
+    entityNotReady: "A entidade da zona ainda não está pronta.",
+    collides: (t, l) => `A hora de início colide (a sequência demora ${t} min): ${l}`,
+    collisionWarn: (t, l) => `⚠️ Horas de início em colisão (a sequência demora ${t} min): ${l}`,
+    actionFailed: (e) => `Ação falhou: ${e}`,
+    addZoneFail: (e) => `Não foi possível adicionar a zona: ${e}`,
+    addSetupFail: (e) => `Não foi possível adicionar o conjunto: ${e}`,
+    updateFail: (e) => `Atualização falhou: ${e}`,
+    deleteFail: (e) => `Eliminação falhou: ${e}`,
+    addStartFail: (e) => `Não foi possível adicionar a hora de início: ${e}`,
+    removeStartFail: (e) => `Não foi possível remover a hora de início: ${e}`,
+    addSchedFail: (e) => `Não foi possível adicionar o agendamento: ${e}`,
+    removeSchedFail: (e) => `Não foi possível remover o agendamento: ${e}`,
+  },
+};
+
+function ordinalEn(n) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 const STYLES = `
   :host { display: block; }
@@ -108,6 +194,11 @@ const STYLES = `
   .seqedit { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin-top: 10px; }
   .seqedit .lbl { color: var(--secondary-text-color); margin-right: 4px; }
   .warn { color: var(--error-color); font-size: .85rem; margin-top: 8px; }
+  /* [hidden] must win over the display rules above */
+  .pill[hidden], .vprogress[hidden] { display: none; }
+  .seq-footer { display: flex; padding: 16px 6px 4px; margin-top: 6px; border-top: 1px solid var(--divider-color); }
+  .seq-footer button { flex: 1; justify-content: center; }
+  .title-input { font: inherit; font-size: 1.3rem; font-weight: 700; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); min-width: 0; }
 `;
 
 class GardenIrrigationCard extends HTMLElement {
@@ -243,8 +334,8 @@ class GardenIrrigationCard extends HTMLElement {
       const empty = document.createElement("div");
       empty.className = "empty";
       empty.textContent = this._edit
-        ? "No setups yet. Use “Add setup” to create one (e.g. Garden, Trees)."
-        : "No irrigation setups. Switch to edit mode to add one.";
+        ? this._t("noSetupsEdit")
+        : this._t("noSetupsView");
       card.appendChild(empty);
       if (this._addSetupOpen) card.appendChild(this._buildAddSetupForm());
       root.append(style, card);
@@ -265,10 +356,12 @@ class GardenIrrigationCard extends HTMLElement {
       if (setup.zones.length === 0 && !this._addZoneOpen) {
         const empty = document.createElement("div");
         empty.className = "empty";
-        empty.textContent = "No zones yet.";
+        empty.textContent = this._t("noZones");
         card.appendChild(empty);
       }
       for (const zone of setup.zones) card.appendChild(this._buildZone(setup, zone));
+      if (setup.mode === "sequential" && setup.zones.length)
+        card.appendChild(this._buildSeqFooter(setup));
     }
 
     root.append(style, card);
@@ -284,12 +377,9 @@ class GardenIrrigationCard extends HTMLElement {
     header.appendChild(icon);
 
     const setup = this._currentSetup();
-    if (this._setups.length <= 1 || !setup) {
-      const h1 = document.createElement("h1");
-      h1.textContent =
-        this._config.title || (setup ? setup.name : "Garden watering");
-      header.appendChild(h1);
-    } else {
+
+    // Setup switcher (when more than one setup exists).
+    if (this._setups.length > 1 && setup) {
       const sel = document.createElement("select");
       sel.className = "setup-select";
       for (const s of this._setups) {
@@ -306,6 +396,26 @@ class GardenIrrigationCard extends HTMLElement {
       header.appendChild(sel);
     }
 
+    // Title: editable in edit mode, static otherwise.
+    if (this._edit && setup) {
+      const input = document.createElement("input");
+      input.className = "title-input";
+      input.type = "text";
+      input.value = setup.name || "";
+      input.title = this._t("renameSetup");
+      input.addEventListener("change", () => {
+        const v = input.value.trim();
+        if (v && v !== setup.name)
+          this._updateSetup(setup.entry_id, { name: v });
+      });
+      header.appendChild(input);
+    } else if (this._setups.length <= 1 || !setup) {
+      const h1 = document.createElement("h1");
+      h1.textContent =
+        this._config.title || (setup ? setup.name : this._t("title"));
+      header.appendChild(h1);
+    }
+
     const spacer = document.createElement("div");
     spacer.className = "spacer";
     header.appendChild(spacer);
@@ -313,7 +423,7 @@ class GardenIrrigationCard extends HTMLElement {
     if (this._edit) {
       const addZone = document.createElement("button");
       addZone.className = "add-zone";
-      addZone.innerHTML = `<ha-icon icon="mdi:plus"></ha-icon> Add zone`;
+      addZone.innerHTML = `<ha-icon icon="mdi:plus"></ha-icon> ${this._t("addZone")}`;
       addZone.disabled = !setup;
       addZone.addEventListener("click", () => {
         this._addZoneOpen = !this._addZoneOpen;
@@ -322,7 +432,7 @@ class GardenIrrigationCard extends HTMLElement {
       header.appendChild(addZone);
 
       const addSetup = document.createElement("button");
-      addSetup.innerHTML = `<ha-icon icon="mdi:folder-plus-outline"></ha-icon> Add setup`;
+      addSetup.innerHTML = `<ha-icon icon="mdi:folder-plus-outline"></ha-icon> ${this._t("addSetup")}`;
       addSetup.addEventListener("click", () => {
         this._addSetupOpen = !this._addSetupOpen;
         this._rebuild();
@@ -332,8 +442,8 @@ class GardenIrrigationCard extends HTMLElement {
 
     const modeBtn = document.createElement("button");
     modeBtn.innerHTML = this._edit
-      ? `<ha-icon icon="mdi:check"></ha-icon> Done`
-      : `<ha-icon icon="mdi:pencil"></ha-icon> Edit`;
+      ? `<ha-icon icon="mdi:check"></ha-icon> ${this._t("done")}`
+      : `<ha-icon icon="mdi:pencil"></ha-icon> ${this._t("edit")}`;
     if (this._edit) modeBtn.classList.add("active");
     modeBtn.addEventListener("click", () => {
       this._edit = !this._edit;
@@ -352,14 +462,14 @@ class GardenIrrigationCard extends HTMLElement {
 
     const lbl = document.createElement("span");
     lbl.className = "lbl";
-    lbl.textContent = "Scheduling:";
+    lbl.textContent = this._t("scheduling");
     bar.appendChild(lbl);
 
     const toggle = document.createElement("div");
     toggle.className = "toggle";
     [
-      ["sequential", "Sequential"],
-      ["specific", "Specific times"],
+      ["sequential", this._t("sequential")],
+      ["specific", this._t("specific")],
     ].forEach(([value, label]) => {
       const b = document.createElement("button");
       b.textContent = label;
@@ -377,7 +487,7 @@ class GardenIrrigationCard extends HTMLElement {
 
     const del = document.createElement("button");
     del.className = "icon-btn";
-    del.title = "Delete setup";
+    del.title = this._t("deleteSetup");
     del.innerHTML = `<ha-icon icon="mdi:trash-can-outline"></ha-icon>`;
     del.addEventListener("click", () => this._deleteSetup(setup));
     bar.appendChild(del);
@@ -393,16 +503,23 @@ class GardenIrrigationCard extends HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "field-row";
     wrap.appendChild(
-      this._scriptField("Pre-irrigation script", setup.pre_script, (v) =>
+      this._scriptField(this._t("preScript"), setup.pre_script, (v) =>
         this._updateSetup(setup.entry_id, { pre_script: v || null })
       )
     );
     wrap.appendChild(
-      this._scriptField("Post-irrigation script", setup.post_script, (v) =>
+      this._scriptField(this._t("postScript"), setup.post_script, (v) =>
         this._updateSetup(setup.entry_id, { post_script: v || null })
       )
     );
     return wrap;
+  }
+
+  _buildSeqFooter(setup) {
+    const footer = document.createElement("div");
+    footer.className = "seq-footer";
+    footer.appendChild(this._seqRunButton(setup));
+    return footer;
   }
 
   _seqRunButton(setup) {
@@ -413,12 +530,12 @@ class GardenIrrigationCard extends HTMLElement {
     const run = document.createElement("button");
     if (anyRunning) {
       run.className = "stop";
-      run.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> Stop`;
+      run.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> ${this._t("stop")}`;
       run.addEventListener("click", () =>
         this._ws({ type: "garden_irrigation/setup/stop", entry_id: setup.entry_id })
       );
     } else {
-      run.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> Run sequence`;
+      run.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> ${this._t("runSequence")}`;
       run.addEventListener("click", () =>
         this._ws({ type: "garden_irrigation/setup/run", entry_id: setup.entry_id })
       );
@@ -437,16 +554,10 @@ class GardenIrrigationCard extends HTMLElement {
     const dayText = this._uniformDaysText(setup.start_times);
 
     const txt = document.createElement("span");
-    txt.innerHTML = `Starts ${timesHtml}${
+    txt.innerHTML = `${this._escape(this._t("starts"))} ${timesHtml}${
       dayText ? " · " + this._escape(dayText) : ""
     }`;
     bar.appendChild(txt);
-
-    const spacer = document.createElement("div");
-    spacer.style.flex = "1";
-    bar.appendChild(spacer);
-
-    bar.appendChild(this._seqRunButton(setup));
     return bar;
   }
 
@@ -459,14 +570,14 @@ class GardenIrrigationCard extends HTMLElement {
 
     const lbl = document.createElement("span");
     lbl.className = "lbl";
-    lbl.textContent = "Starts:";
+    lbl.textContent = this._t("startsLabel");
     chips.appendChild(lbl);
 
     const starts = setup.start_times || [];
     if (starts.length === 0) {
       const none = document.createElement("span");
       none.className = "no-sched";
-      none.textContent = "No start times";
+      none.textContent = this._t("noStartTimes");
       chips.appendChild(none);
     }
     starts.forEach((s, index) => {
@@ -484,14 +595,9 @@ class GardenIrrigationCard extends HTMLElement {
     const time = this._make24hTime("06:00", null);
     chips.appendChild(time.wrap);
     const add = document.createElement("button");
-    add.textContent = "Add";
+    add.textContent = this._t("add");
     add.addEventListener("click", () => this._addStartTime(setup, time.get()));
     chips.appendChild(add);
-
-    const spacer = document.createElement("div");
-    spacer.style.flex = "1";
-    chips.appendChild(spacer);
-    chips.appendChild(this._seqRunButton(setup));
 
     box.appendChild(chips);
 
@@ -499,9 +605,11 @@ class GardenIrrigationCard extends HTMLElement {
     if (collisions.length) {
       const warn = document.createElement("div");
       warn.className = "warn";
-      warn.textContent = `⚠️ Colliding start times (sequence runs ${setup.total_duration} min): ${collisions.join(
-        "; "
-      )}`;
+      warn.textContent = this._t(
+        "collisionWarn",
+        setup.total_duration,
+        collisions.join("; ")
+      );
       box.appendChild(warn);
     }
 
@@ -541,7 +649,10 @@ class GardenIrrigationCard extends HTMLElement {
           const key = [ta, tb].sort().join("|") + da;
           if (seen.has(key)) continue;
           seen.add(key);
-          out.push(`${ta} and ${tb} on ${DAY_LABEL[da] || da}`);
+          const lang = this._lang();
+          const sep = lang === "pt" ? " e " : " and ";
+          const on = lang === "pt" ? " — " : " on ";
+          out.push(`${ta}${sep}${tb}${on}${DAY_LABEL[lang][da] || da}`);
         }
       }
     }
@@ -555,9 +666,7 @@ class GardenIrrigationCard extends HTMLElement {
     }).filter((c) => !this._startCollisions(setup).includes(c));
     if (introduced.length) {
       this._toast(
-        `Start time collides (sequence runs ${setup.total_duration} min): ${introduced.join(
-          "; "
-        )}`
+        this._t("collides", setup.total_duration, introduced.join("; "))
       );
       return;
     }
@@ -570,7 +679,7 @@ class GardenIrrigationCard extends HTMLElement {
       });
       await this._fetch();
     } catch (err) {
-      this._toast(`Could not add start time: ${err.message || err}`);
+      this._toast(this._t("addStartFail", err.message || err));
     }
   }
 
@@ -583,7 +692,7 @@ class GardenIrrigationCard extends HTMLElement {
       });
       await this._fetch();
     } catch (err) {
-      this._toast(`Could not remove start time: ${err.message || err}`);
+      this._toast(this._t("removeStartFail", err.message || err));
     }
   }
 
@@ -597,20 +706,16 @@ class GardenIrrigationCard extends HTMLElement {
     const dur = `<span class="dur">${zone.duration} min</span>`;
     if (setup.mode === "sequential") {
       const idx = setup.zones.findIndex((z) => z.zone_id === zone.zone_id);
-      return `${dur} · runs ${this._ordinal(idx + 1)}`;
+      return `${dur} · ${this._escape(this._t("runsNth", idx + 1))}`;
     }
     const times = (zone.schedules || []).map((s) => this._escape(s.time));
     if (times.length === 0)
-      return `${dur} · <span style="opacity:.85">no schedules</span>`;
+      return `${dur} · <span style="opacity:.85">${this._escape(
+        this._t("noSchedules").toLowerCase()
+      )}</span>`;
     const shown = times.slice(0, 3).join(" · ");
     const extra = times.length > 3 ? ` +${times.length - 3}` : "";
     return `${dur} · ${shown}${extra}`;
-  }
-
-  _ordinal(n) {
-    const s = ["th", "st", "nd", "rd"];
-    const v = n % 100;
-    return n + (s[(v - 20) % 10] || s[v] || s[0]);
   }
 
   _buildZoneView(setup, zone) {
@@ -714,7 +819,7 @@ class GardenIrrigationCard extends HTMLElement {
       const swField = document.createElement("div");
       swField.className = "field";
       const swLabel = document.createElement("label");
-      swLabel.textContent = "Switch / relay";
+      swLabel.textContent = this._t("switchRelay");
       const sw = this._entityPicker(
         zone.switch_entity,
         ["switch", "input_boolean"],
@@ -722,10 +827,10 @@ class GardenIrrigationCard extends HTMLElement {
       );
       swField.append(swLabel, sw.el);
 
-      const preField = this._scriptField("Pre-script", zone.pre_script, (v) =>
+      const preField = this._scriptField(this._t("preScriptShort"), zone.pre_script, (v) =>
         this._updateZone(setup.entry_id, zone.zone_id, { pre_script: v || null })
       );
-      const postField = this._scriptField("Post-script", zone.post_script, (v) =>
+      const postField = this._scriptField(this._t("postScriptShort"), zone.post_script, (v) =>
         this._updateZone(setup.entry_id, zone.zone_id, { post_script: v || null })
       );
       subWrap.append(swField, preField, postField);
@@ -737,7 +842,7 @@ class GardenIrrigationCard extends HTMLElement {
     if (this._edit) {
       const del = document.createElement("button");
       del.className = "icon-btn";
-      del.title = "Delete zone";
+      del.title = this._t("deleteZone");
       del.innerHTML = `<ha-icon icon="mdi:trash-can-outline"></ha-icon>`;
       del.addEventListener("click", () => this._deleteZone(setup, zone));
       head.appendChild(del);
@@ -747,7 +852,7 @@ class GardenIrrigationCard extends HTMLElement {
     // Duration slider (always editable)
     const durRow = document.createElement("div");
     durRow.className = "row";
-    durRow.innerHTML = `<span class="label">Duration</span>`;
+    durRow.innerHTML = `<span class="label">${this._t("duration")}</span>`;
     const slider = document.createElement("input");
     slider.type = "range";
     slider.min = "1";
@@ -774,7 +879,7 @@ class GardenIrrigationCard extends HTMLElement {
     if (setup.mode === "specific") {
       const schedLabel = document.createElement("div");
       schedLabel.className = "sched-label";
-      schedLabel.textContent = "Schedules";
+      schedLabel.textContent = this._t("schedulesLabel");
       el.appendChild(schedLabel);
 
       const chips = document.createElement("div");
@@ -783,7 +888,7 @@ class GardenIrrigationCard extends HTMLElement {
       if (schedules.length === 0) {
         const none = document.createElement("span");
         none.className = "no-sched";
-        none.textContent = "No schedules";
+        none.textContent = this._t("noSchedules");
         chips.appendChild(none);
       }
       schedules.forEach((s, index) => {
@@ -803,7 +908,7 @@ class GardenIrrigationCard extends HTMLElement {
       const time = this._make24hTime("06:00", null);
       chips.appendChild(time.wrap);
       const addBtn = document.createElement("button");
-      addBtn.textContent = "Add";
+      addBtn.textContent = this._t("add");
       addBtn.addEventListener("click", () =>
         this._addSchedule(setup.entry_id, zone.zone_id, time.get())
       );
@@ -811,21 +916,7 @@ class GardenIrrigationCard extends HTMLElement {
       el.appendChild(chips);
     }
 
-    el.appendChild(document.createElement("hr"));
-
-    // Actions
-    const actions = document.createElement("div");
-    actions.className = "actions";
-    const action = document.createElement("button");
-    action.addEventListener("click", () => this._toggleRun(zone));
-    const status = document.createElement("span");
-    status.className = "status";
-    actions.append(action, status);
-    el.appendChild(actions);
-    refs.action = action;
-    refs.status = status;
-    refs.duration = zone.duration;
-
+    // Edit mode is for configuration only — no Run/Stop row here.
     this._refs[zone.zone_id] = refs;
     return el;
   }
@@ -844,10 +935,10 @@ class GardenIrrigationCard extends HTMLElement {
     const form = document.createElement("div");
     form.className = "form";
     form.innerHTML = `
-      <div class="field"><label>Zone name</label><input type="text" id="z-name" placeholder="e.g. Front lawn" /></div>
-      <div class="field"><label>Switch / relay</label><div id="z-picker"></div></div>
-      <div class="field"><label>Duration (minutes)</label><input type="number" id="z-dur" min="1" max="60" value="10" /></div>
-      <div class="form-actions"><button id="z-cancel">Cancel</button><button id="z-save" class="primary">Save zone</button></div>
+      <div class="field"><label>${this._t("zoneName")}</label><input type="text" id="z-name" placeholder="${this._t("zoneNamePh")}" /></div>
+      <div class="field"><label>${this._t("switchRelay")}</label><div id="z-picker"></div></div>
+      <div class="field"><label>${this._t("durationMinutes")}</label><input type="number" id="z-dur" min="1" max="60" value="10" /></div>
+      <div class="form-actions"><button id="z-cancel">${this._t("cancel")}</button><button id="z-save" class="primary">${this._t("saveZone")}</button></div>
     `;
     const sw = this._entityPicker(null, ["switch", "input_boolean"], () => {});
     form.querySelector("#z-picker").appendChild(sw.el);
@@ -860,7 +951,7 @@ class GardenIrrigationCard extends HTMLElement {
       const switch_entity = sw.get();
       const duration = parseInt(form.querySelector("#z-dur").value, 10) || 10;
       if (!name || !switch_entity) {
-        this._toast("Enter a name and pick a switch.");
+        this._toast(this._t("needNameSwitch"));
         return;
       }
       try {
@@ -874,7 +965,7 @@ class GardenIrrigationCard extends HTMLElement {
         this._addZoneOpen = false;
         await this._fetch();
       } catch (err) {
-        this._toast(`Could not add zone: ${err.message || err}`);
+        this._toast(this._t("addZoneFail", err.message || err));
       }
     });
     return form;
@@ -884,18 +975,18 @@ class GardenIrrigationCard extends HTMLElement {
     const form = document.createElement("div");
     form.className = "form";
     form.innerHTML = `
-      <div class="field"><label>Setup name</label><input type="text" id="s-name" placeholder="e.g. Trees" /></div>
-      <div class="field"><label>Scheduling mode</label>
+      <div class="field"><label>${this._t("setupName")}</label><input type="text" id="s-name" placeholder="${this._t("setupNamePh")}" /></div>
+      <div class="field"><label>${this._t("schedulingMode")}</label>
         <div class="toggle" id="s-mode">
-          <button data-v="specific" class="on">Specific times</button>
-          <button data-v="sequential">Sequential</button>
+          <button data-v="specific" class="on">${this._t("specific")}</button>
+          <button data-v="sequential">${this._t("sequential")}</button>
         </div>
       </div>
       <div class="field" id="s-seq" hidden>
-        <label>Start time &amp; days</label>
+        <label>${this._t("startDays")}</label>
         <div class="seq-bar" id="s-seqbar"></div>
       </div>
-      <div class="form-actions"><button id="s-cancel">Cancel</button><button id="s-save" class="primary">Create setup</button></div>
+      <div class="form-actions"><button id="s-cancel">${this._t("cancel")}</button><button id="s-save" class="primary">${this._t("createSetup")}</button></div>
     `;
     let mode = "specific";
     const seqWrap = form.querySelector("#s-seq");
@@ -920,7 +1011,7 @@ class GardenIrrigationCard extends HTMLElement {
     form.querySelector("#s-save").addEventListener("click", async () => {
       const name = form.querySelector("#s-name").value.trim();
       if (!name) {
-        this._toast("Enter a setup name.");
+        this._toast(this._t("needSetupName"));
         return;
       }
       try {
@@ -935,7 +1026,7 @@ class GardenIrrigationCard extends HTMLElement {
         if (res && res.entry_id) this._selected = res.entry_id;
         await this._fetch();
       } catch (err) {
-        this._toast(`Could not add setup: ${err.message || err}`);
+        this._toast(this._t("addSetupFail", err.message || err));
       }
     });
     return form;
@@ -955,37 +1046,29 @@ class GardenIrrigationCard extends HTMLElement {
       const source = attrs.run_source === "scheduled" ? "scheduled" : "manual";
 
       refs.el.classList.toggle("running", running);
-      refs.endsAt = running ? attrs.ends_at || null : null;
 
       if (refs.kind === "view") {
+        refs.endsAt = running ? attrs.ends_at || null : null;
         refs.pill.hidden = !running;
-        if (running) refs.pillText.textContent = source;
+        if (running) refs.pillText.textContent = this._t(source);
         refs.progress.hidden = !running;
         refs.action.className = running ? "stop" : "";
         refs.action.innerHTML = running
-          ? `<ha-icon icon="mdi:stop"></ha-icon> Stop`
-          : `<ha-icon icon="mdi:play"></ha-icon> Run`;
+          ? `<ha-icon icon="mdi:stop"></ha-icon> ${this._t("stop")}`
+          : `<ha-icon icon="mdi:play"></ha-icon> ${this._t("run")}`;
         continue;
       }
 
-      // edit mode
+      // edit mode (configuration only — no run/stop, no countdown)
       if (running) {
         refs.badge.hidden = false;
-        refs.badgeText.textContent = `Watering · ${source}`;
+        refs.badgeText.textContent = `${this._t("watering")} · ${this._t(source)}`;
       } else {
         refs.badge.hidden = true;
       }
       if (this.shadowRoot.activeElement !== refs.slider) {
         refs.slider.value = String(zone.duration);
         refs.durVal.textContent = `${zone.duration} min`;
-      }
-      if (running) {
-        refs.action.className = "stop";
-        refs.action.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> Stop`;
-      } else {
-        refs.action.className = "";
-        refs.action.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> Run now`;
-        refs.status.innerHTML = `${zone.duration} min manual run`;
       }
     }
     this._tick();
@@ -995,21 +1078,17 @@ class GardenIrrigationCard extends HTMLElement {
     if (!this._refs) return;
     for (const zoneId of Object.keys(this._refs)) {
       const refs = this._refs[zoneId];
-      if (!refs.endsAt) continue;
+      if (refs.kind !== "view" || !refs.endsAt) continue;
       const left = Math.max(
         0,
         Math.round((new Date(refs.endsAt).getTime() - Date.now()) / 1000)
       );
       const m = Math.floor(left / 60);
       const s = String(left % 60).padStart(2, "0");
-      if (refs.kind === "view") {
-        const total = refs.total || 1;
-        const pct = Math.min(100, Math.max(0, ((total - left) / total) * 100));
-        refs.fill.style.width = `${pct}%`;
-        refs.left.textContent = `${m}:${s}`;
-      } else {
-        refs.status.innerHTML = `Time left: <b>${m}:${s}</b>`;
-      }
+      const total = refs.total || 1;
+      const pct = Math.min(100, Math.max(0, ((total - left) / total) * 100));
+      refs.fill.style.width = `${pct}%`;
+      refs.left.textContent = `${m}:${s}`;
     }
   }
 
@@ -1019,7 +1098,7 @@ class GardenIrrigationCard extends HTMLElement {
     const st = this._stateFor(zone);
     const running = st && st.state === "on";
     if (!zone.entity_id) {
-      this._toast("Zone entity not ready yet.");
+      this._toast(this._t("entityNotReady"));
       return;
     }
     try {
@@ -1027,7 +1106,7 @@ class GardenIrrigationCard extends HTMLElement {
         entity_id: zone.entity_id,
       });
     } catch (err) {
-      this._toast(`Action failed: ${err.message || err}`);
+      this._toast(this._t("actionFailed", err.message || err));
     }
   }
 
@@ -1036,23 +1115,19 @@ class GardenIrrigationCard extends HTMLElement {
       await this._ws({ type: "garden_irrigation/setup/update", entry_id, ...changes });
       await this._fetch();
     } catch (err) {
-      this._toast(`Update failed: ${err.message || err}`);
+      this._toast(this._t("updateFail", err.message || err));
     }
   }
 
   async _deleteSetup(setup) {
-    if (!confirm(`Delete the whole “${setup.name}” setup and its zones?`)) return;
+    if (!confirm(this._t("confirmDelSetup", setup.name))) return;
     try {
       await this._ws({ type: "garden_irrigation/setup/delete", entry_id: setup.entry_id });
       this._selected = null;
       await this._fetch();
     } catch (err) {
-      this._toast(`Delete failed: ${err.message || err}`);
+      this._toast(this._t("deleteFail", err.message || err));
     }
-  }
-
-  async _addSetup() {
-    /* handled inline in the form */
   }
 
   async _updateZone(entry_id, zone_id, changes) {
@@ -1060,12 +1135,12 @@ class GardenIrrigationCard extends HTMLElement {
       await this._ws({ type: "garden_irrigation/zone/update", entry_id, zone_id, ...changes });
       await this._fetch();
     } catch (err) {
-      this._toast(`Update failed: ${err.message || err}`);
+      this._toast(this._t("updateFail", err.message || err));
     }
   }
 
   async _deleteZone(setup, zone) {
-    if (!confirm(`Delete zone “${zone.name}”?`)) return;
+    if (!confirm(this._t("confirmDelZone", zone.name))) return;
     try {
       await this._ws({
         type: "garden_irrigation/zone/delete",
@@ -1074,7 +1149,7 @@ class GardenIrrigationCard extends HTMLElement {
       });
       await this._fetch();
     } catch (err) {
-      this._toast(`Delete failed: ${err.message || err}`);
+      this._toast(this._t("deleteFail", err.message || err));
     }
   }
 
@@ -1089,7 +1164,7 @@ class GardenIrrigationCard extends HTMLElement {
       });
       await this._fetch();
     } catch (err) {
-      this._toast(`Could not add schedule: ${err.message || err}`);
+      this._toast(this._t("addSchedFail", err.message || err));
     }
   }
 
@@ -1103,7 +1178,7 @@ class GardenIrrigationCard extends HTMLElement {
       });
       await this._fetch();
     } catch (err) {
-      this._toast(`Could not remove schedule: ${err.message || err}`);
+      this._toast(this._t("removeSchedFail", err.message || err));
     }
   }
 
@@ -1141,7 +1216,21 @@ class GardenIrrigationCard extends HTMLElement {
     return { wrap, get };
   }
 
+  _lang() {
+    const l =
+      (this._hass && (this._hass.locale?.language || this._hass.language)) || "en";
+    return String(l).toLowerCase().startsWith("pt") ? "pt" : "en";
+  }
+
+  _t(key, ...args) {
+    const lang = this._lang();
+    const dict = STR[lang] || STR.en;
+    const v = dict[key] !== undefined ? dict[key] : STR.en[key];
+    return typeof v === "function" ? v(...args) : v;
+  }
+
   _makeDaysEditor(days, editable, onChange) {
+    const lang = this._lang();
     const wrap = document.createElement("span");
     wrap.className = "days";
     const sel = new Set(days && days.length ? days : WEEKDAYS);
@@ -1149,8 +1238,8 @@ class GardenIrrigationCard extends HTMLElement {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "day" + (sel.has(d) ? " on" : "");
-      b.textContent = DAY_SHORT[d];
-      b.title = DAY_LABEL[d];
+      b.textContent = DAY_SHORT[lang][d];
+      b.title = DAY_LABEL[lang][d];
       if (editable) {
         b.addEventListener("click", () => {
           if (sel.has(d)) sel.delete(d);
@@ -1185,9 +1274,10 @@ class GardenIrrigationCard extends HTMLElement {
   }
 
   _formatDays(days) {
-    if (!days || days.length === 0 || days.length === 7) return "every day";
+    if (!days || days.length === 0 || days.length === 7) return this._t("everyDay");
+    const lang = this._lang();
     return WEEKDAYS.filter((d) => days.includes(d))
-      .map((d) => DAY_LABEL[d].slice(0, 3))
+      .map((d) => DAY_LABEL[lang][d].slice(0, 3))
       .join(", ");
   }
 

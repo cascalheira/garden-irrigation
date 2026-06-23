@@ -31,7 +31,8 @@ and services — no YAML required.
 - A **Time remaining** sensor per zone, with `next_run` and run metadata exposed as
   attributes.
 - A **dashboard card** with view/edit modes that manages setups, zones and
-  schedules (24-hour time pickers).
+  schedules (24-hour time pickers). Localised in **English** and
+  **European Portuguese** (follows your Home Assistant language).
 
 ## Installation
 
@@ -73,8 +74,10 @@ The card has two modes (toggle with the **Edit / Done** button):
 
 - **View mode** — a compact, read-only layout: each zone shows its duration and
   schedule times (or position in a sequence), with only **Run / Stop**. A running
-  zone shows a live **progress bar** and time remaining. No editing controls.
-- **Edit mode** — everything is editable:
+  zone shows a live **progress bar** and time remaining. No editing controls. For
+  sequential setups, **Run sequence** sits below the last zone.
+- **Edit mode** — configuration only (no per-zone Run button); rename the setup
+  inline, and edit everything:
   - **Add zone** / **Add setup** (only visible in edit mode)
   - **Delete** zone or setup
   - the zone's **switch** and **pre/post scripts** (shown and editable)

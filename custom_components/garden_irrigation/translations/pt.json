@@ -1,0 +1,171 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Adicionar conjunto de rega",
+        "description": "Crie um conjunto de rega (por ex. “Jardim” ou “Árvores”). Pode adicionar mais conjuntos depois.",
+        "data": {
+          "name": "Nome do conjunto",
+          "mode": "Modo de agendamento"
+        },
+        "data_description": {
+          "mode": "Sequencial: uma hora de início, as zonas correm uma a seguir à outra. Horas específicas: cada zona tem os seus próprios agendamentos (podem sobrepor-se)."
+        }
+      },
+      "sequential": {
+        "title": "Início sequencial",
+        "description": "Escolha quando este conjunto começa e em que dias. As zonas correm uma a seguir à outra, por ordem.",
+        "data": {
+          "start_time": "Hora de início",
+          "days": "Dias",
+          "pre_script": "Script de pré-rega (opcional)",
+          "post_script": "Script de pós-rega (opcional)"
+        },
+        "data_description": {
+          "pre_script": "Script executado e aguardado uma vez antes de a sequência começar (por ex. abrir a alimentação principal).",
+          "post_script": "Script executado e aguardado uma vez depois de a sequência terminar (por ex. fechar a alimentação principal, notificar)."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "menu": {
+        "title": "Opções do conjunto",
+        "description": "{summary}\n\n{warning}",
+        "menu_options": {
+          "settings": "Modo de agendamento e scripts",
+          "add_start": "Adicionar uma hora de início",
+          "remove_start": "Remover hora(s) de início",
+          "finish": "Guardar"
+        }
+      },
+      "settings": {
+        "title": "Modo de agendamento e scripts",
+        "description": "Os conjuntos específicos agendam cada zona separadamente. Os conjuntos sequenciais correm todas as zonas por ordem a partir da(s) hora(s) de início abaixo; os scripts correm uma vez em torno de toda a sequência.",
+        "data": {
+          "mode": "Modo de agendamento",
+          "pre_script": "Script de pré-rega (sequencial)",
+          "post_script": "Script de pós-rega (sequencial)"
+        }
+      },
+      "add_start": {
+        "title": "Adicionar hora de início",
+        "description": "Adicione uma hora do dia para a sequência completa correr e os dias em que se aplica. As horas têm de estar afastadas pelo menos a duração total da sequência para que as execuções não colidam.",
+        "data": {
+          "time": "Hora de início",
+          "days": "Dias"
+        }
+      },
+      "remove_start": {
+        "title": "Remover hora(s) de início",
+        "description": "Selecione as horas de início a eliminar.",
+        "data": {
+          "start_times": "Horas de início"
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "zone": {
+      "title": "Zona",
+      "initiate_flow": {
+        "user": "Adicionar zona",
+        "reconfigure": "Reconfigurar zona"
+      },
+      "entry_type": "Zona",
+      "step": {
+        "settings": {
+          "title": "Definições da zona",
+          "description": "Configure o interruptor que esta zona controla e durante quanto tempo corre.",
+          "data": {
+            "name": "Nome da zona",
+            "switch_entity": "Interruptor / relé",
+            "duration": "Duração da rega (minutos)",
+            "pre_script": "Script de pré-rega (opcional)",
+            "post_script": "Script de pós-rega (opcional)"
+          },
+          "data_description": {
+            "switch_entity": "O interruptor ou input_boolean que abre a válvula desta zona.",
+            "duration": "Durante quanto tempo a zona rega em cada execução (1-60 minutos).",
+            "pre_script": "Script executado e aguardado antes de a válvula abrir (por ex. abrir a alimentação principal).",
+            "post_script": "Script executado e aguardado depois de a válvula fechar (por ex. notificar, fechar a alimentação)."
+          }
+        },
+        "menu": {
+          "title": "Configuração da zona",
+          "description": "{summary}\n\n{warning}",
+          "menu_options": {
+            "settings": "Editar definições da zona",
+            "add_schedule": "Adicionar um agendamento",
+            "remove_schedule": "Remover agendamento(s)",
+            "finish": "Guardar zona"
+          }
+        },
+        "add_schedule": {
+          "title": "Adicionar agendamento",
+          "description": "Escolha uma hora de início e os dias em que deve correr. Pode adicionar vários agendamentos por zona.",
+          "data": {
+            "time": "Hora de início",
+            "days": "Dias"
+          }
+        },
+        "remove_schedule": {
+          "title": "Remover agendamento(s)",
+          "description": "Selecione os agendamentos a eliminar.",
+          "data": {
+            "schedules": "Agendamentos"
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "Zona atualizada."
+      }
+    }
+  },
+  "selector": {
+    "mode": {
+      "options": {
+        "sequential": "Sequencial (uma hora de início, zonas por ordem)",
+        "specific": "Horas específicas (agendamentos por zona)"
+      }
+    }
+  },
+  "issues": {
+    "schedule_overlap": {
+      "title": "Agendamentos de rega sobrepostos",
+      "description": "No conjunto “{setup}”, algumas zonas estão agendadas para regar em horas sobrepostas (vão correr em simultâneo):\n\n{overlaps}"
+    },
+    "start_collision": {
+      "title": "Horas de início sequenciais em colisão",
+      "description": "No conjunto “{setup}”, algumas horas de início estão mais próximas do que a duração total da sequência, pelo que as execuções iriam colidir:\n\n{collisions}"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "remaining": {
+        "name": "Tempo restante"
+      }
+    }
+  },
+  "services": {
+    "start": {
+      "name": "Iniciar zona",
+      "description": "Inicia a rega de uma zona agora, podendo substituir a duração predefinida.",
+      "fields": {
+        "duration": {
+          "name": "Duração",
+          "description": "Tempo de execução em minutos (1-60). Por predefinição usa a duração configurada da zona."
+        }
+      }
+    },
+    "stop": {
+      "name": "Parar zona",
+      "description": "Para uma zona em execução e remove-a da fila."
+    },
+    "stop_all": {
+      "name": "Parar todas as zonas",
+      "description": "Para imediatamente todas as zonas em execução em todos os conjuntos."
+    }
+  }
+}
