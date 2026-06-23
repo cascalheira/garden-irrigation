@@ -373,7 +373,7 @@ class GardenIrrigationCard extends HTMLElement {
     header.className = "header";
 
     const icon = document.createElement("ha-icon");
-    icon.setAttribute("icon", "mdi:water");
+    icon.setAttribute("icon", "mdi:sprinkler-variant");
     header.appendChild(icon);
 
     const setup = this._currentSetup();
@@ -411,8 +411,9 @@ class GardenIrrigationCard extends HTMLElement {
       header.appendChild(input);
     } else if (this._setups.length <= 1 || !setup) {
       const h1 = document.createElement("h1");
-      h1.textContent =
-        this._config.title || (setup ? setup.name : this._t("title"));
+      // The setup name is authoritative; card `title` is only a fallback when
+      // no setup is loaded yet.
+      h1.textContent = setup ? setup.name : this._config.title || this._t("title");
       header.appendChild(h1);
     }
 

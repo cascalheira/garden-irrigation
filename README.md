@@ -65,10 +65,13 @@ Add it to a dashboard:
 
 ```yaml
 type: custom:garden-irrigation-card
-title: Garden watering   # optional — header label when a single setup
 mode: view               # "view" (default) or "edit"
 setup: Garden            # optional — pin to a setup by name or entry_id
+title: Garden watering   # optional fallback only; the setup name is shown when loaded
 ```
+
+The header shows the **setup name** (rename it inline in edit mode). `title` is
+only used as a fallback before a setup loads.
 
 The card has two modes (toggle with the **Edit / Done** button):
 
