@@ -219,6 +219,8 @@ const STYLES = `
   .vzone.running + .vzone { border-top: none; }
   .vzone.disabled .info { opacity: .45; }
   .vactions { display: flex; align-items: center; gap: 12px; flex: none; }
+  .runbtn { padding: 8px 12px; }
+  .runbtn ha-icon { --mdc-icon-size: 22px; }
   .setup-off .seqbar, .setup-off .raininfo { opacity: .5; }
   .vzone .info { flex: 1; min-width: 0; }
   .vname { font-weight: 650; font-size: 1.05rem; display: flex; align-items: center; gap: 9px; color: var(--primary-text-color); }
@@ -1336,10 +1338,11 @@ class GardenIrrigationCard extends HTMLElement {
         if (running) refs.pillText.textContent = this._t(source);
         refs.progress.hidden = !running;
         if (refs.action) {
-          refs.action.className = running ? "stop" : "";
+          refs.action.className = running ? "runbtn stop" : "runbtn";
+          refs.action.title = running ? this._t("stop") : this._t("run");
           refs.action.innerHTML = running
-            ? `<ha-icon icon="mdi:stop"></ha-icon> ${this._t("stop")}`
-            : `<ha-icon icon="mdi:play"></ha-icon> ${this._t("run")}`;
+            ? `<ha-icon icon="mdi:stop"></ha-icon>`
+            : `<ha-icon icon="mdi:play"></ha-icon>`;
         }
         continue;
       }
