@@ -29,6 +29,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_DAYS,
     CONF_DURATION,
+    CONF_ENABLED,
     CONF_FORECAST_ENTITY,
     CONF_FORECAST_HOURS,
     CONF_FORECAST_THRESHOLD,
@@ -82,6 +83,7 @@ class Zone:
     schedules: list[dict[str, Any]] = field(default_factory=list)
     pre_script: str | None = None
     post_script: str | None = None
+    enabled: bool = True
 
 
 @dataclass
@@ -103,6 +105,7 @@ def zone_from_subentry(subentry_id: str, data: dict[str, Any]) -> Zone:
         schedules=list(data.get(CONF_SCHEDULES, [])),
         pre_script=data.get(CONF_PRE_SCRIPT) or None,
         post_script=data.get(CONF_POST_SCRIPT) or None,
+        enabled=data.get(CONF_ENABLED, True),
     )
 
 
@@ -118,6 +121,11 @@ class IrrigationController:
         self._last_skip: dict[str, Any] | None = None
 
     # ----- configuration helpers -------------------------------------------------
+
+    @property
+    def enabled(self) -> bool:
+        """Whether the setup is enabled (False = paused, no watering)."""
+        return self.entry.options.get(CONF_ENABLED, True)
 
     @property
     def mode(self) -> str:
@@ -239,6 +247,8 @@ class IrrigationController:
         self.hass.async_create_task(self._scheduled_chain())
 
     async def _scheduled_chain(self) -> None:
+        if not self.enabled:
+            return
         reason = await self.async_skip_reason()
         if reason:
             self._record_skip(reason)
@@ -257,6 +267,11 @@ class IrrigationController:
         self.hass.async_create_task(self._scheduled_zone(zone_id))
 
     async def _scheduled_zone(self, zone_id: str) -> None:
+        if not self.enabled:
+            return
+        zone = self.get_zone(zone_id)
+        if zone is None or not zone.enabled:
+            return
         reason = await self.async_skip_reason()
         if reason:
             self._record_skip(reason)
@@ -273,6 +288,8 @@ class IrrigationController:
         if zone is None:
             _LOGGER.warning("Cannot start unknown zone %s", zone_id)
             return
+        if not self.enabled or not zone.enabled:
+            return  # paused
         if zone_id in self._running:
             return  # already watering
 
@@ -284,10 +301,12 @@ class IrrigationController:
 
     @callback
     def async_run_chain(self) -> None:
-        """Start the sequential chain (all zones, in order)."""
+        """Start the sequential chain (all enabled zones, in order)."""
+        if not self.enabled:
+            return
         if self._chain_task and not self._chain_task.done():
             return
-        if not self.zones:
+        if not any(z.enabled for z in self.zones.values()):
             return
         self._chain_task = self.hass.async_create_task(
             self._run_chain(), name=f"{DOMAIN}_chain_{self.entry.entry_id}"
@@ -356,6 +375,8 @@ class IrrigationController:
             if self.pre_script:
                 await self._run_script(self.pre_script)
             for zone in self.zones.values():
+                if not zone.enabled:
+                    continue
                 await self._water(zone, zone.duration * 60, "scheduled")
         except asyncio.CancelledError:
             _LOGGER.debug("Chain for %s stopped early", self.entry.title)

@@ -20,6 +20,7 @@ from homeassistant.helpers import entity_registry as er
 from .const import (
     CONF_DAYS,
     CONF_DURATION,
+    CONF_ENABLED,
     CONF_FORECAST_ENTITY,
     CONF_FORECAST_HOURS,
     CONF_FORECAST_THRESHOLD,
@@ -92,6 +93,7 @@ def _zone_payload(
         "zone_id": subentry_id,
         "entry_id": entry_id,
         "name": data.get(CONF_NAME),
+        "enabled": data.get(CONF_ENABLED, True),
         "switch_entity": data.get(CONF_SWITCH_ENTITY),
         "duration": int(data.get(CONF_DURATION, DEFAULT_DURATION)),
         "schedules": list(data.get(CONF_SCHEDULES, [])),
@@ -127,6 +129,7 @@ def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
     return {
         "entry_id": entry.entry_id,
         "name": entry.title,
+        "enabled": options.get(CONF_ENABLED, True),
         "mode": options.get(CONF_MODE, DEFAULT_MODE),
         "start_times": _start_times(options),
         "pre_script": options.get(CONF_PRE_SCRIPT),
@@ -210,6 +213,7 @@ async def ws_add_setup(
         vol.Required("type"): "garden_irrigation/setup/update",
         vol.Required("entry_id"): str,
         vol.Optional("name"): vol.All(str, vol.Length(min=1)),
+        vol.Optional("enabled"): bool,
         vol.Optional("mode"): vol.In(MODES),
         vol.Optional("start_time"): TIME_RE,
         vol.Optional("days"): [vol.In(WEEKDAYS)],
@@ -236,6 +240,8 @@ def ws_update_setup(
         return
 
     options = dict(entry.options)
+    if "enabled" in msg:
+        options[CONF_ENABLED] = bool(msg["enabled"])
     if "mode" in msg:
         options[CONF_MODE] = msg["mode"]
     if "start_time" in msg:
@@ -479,6 +485,7 @@ def ws_add_zone(
         vol.Required("entry_id"): str,
         vol.Required("zone_id"): str,
         vol.Optional("name"): vol.All(str, vol.Length(min=1)),
+        vol.Optional("enabled"): bool,
         vol.Optional("switch_entity"): str,
         vol.Optional("duration"): vol.All(
             vol.Coerce(int), vol.Range(min=MIN_DURATION, max=MAX_DURATION)
@@ -501,6 +508,8 @@ def ws_update_zone(
         return
 
     data = dict(subentry.data)
+    if "enabled" in msg:
+        data[CONF_ENABLED] = bool(msg["enabled"])
     for key in (
         CONF_NAME,
         CONF_SWITCH_ENTITY,

@@ -25,6 +25,9 @@ and services — no YAML required.
   there's a **high chance of rain soon** (a weather entity's hourly forecast).
   Either condition shows a **warning on the card** before the run and fires a
   `garden_irrigation_skipped` event. Manual runs always water.
+- **Enable / disable** — in the card's view mode, a toggle pauses a whole setup
+  or an individual zone (disabled items are excluded from scheduled and manual
+  runs). When a setup is disabled, the per-zone toggles are hidden.
 - **Manual activation** — every zone is a switch entity you can toggle from any
   dashboard, plus `garden_irrigation.start` (with optional duration override).
 - **Stop in progress** — turn the zone switch off, call `garden_irrigation.stop`,

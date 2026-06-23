@@ -69,6 +69,8 @@ const STR = {
     rainInfoRecent: (mm, h) => `it rained <b>≥${mm} mm</b> in the last <b>${h} h</b>`,
     rainInfoRecentBinary: (h) => `it rained in the last <b>${h} h</b>`,
     rainInfoForecast: (p, h) => `<b>≥${p}%</b> rain is forecast within <b>${h} h</b>`,
+    enable: "Enable",
+    disable: "Disable",
   },
   pt: {
     title: "Rega do jardim",
@@ -120,6 +122,8 @@ const STR = {
     rainInfoRecent: (mm, h) => `choveu <b>≥${mm} mm</b> nas últimas <b>${h} h</b>`,
     rainInfoRecentBinary: (h) => `choveu nas últimas <b>${h} h</b>`,
     rainInfoForecast: (p, h) => `há previsão de chuva <b>≥${p}%</b> nas próximas <b>${h} h</b>`,
+    enable: "Ativar",
+    disable: "Desativar",
   },
 };
 
@@ -209,6 +213,9 @@ const STYLES = `
   .vzone + .vzone { border-top: 1px solid var(--divider-color); }
   .vzone.running { background: rgba(3,169,244,.06); border-radius: 14px; margin: 4px 0; }
   .vzone.running + .vzone { border-top: none; }
+  .vzone.disabled .info { opacity: .45; }
+  .vactions { display: flex; align-items: center; gap: 12px; flex: none; }
+  .setup-off .seqbar, .setup-off .raininfo { opacity: .5; }
   .vzone .info { flex: 1; min-width: 0; }
   .vname { font-weight: 650; font-size: 1.05rem; display: flex; align-items: center; gap: 9px; color: var(--primary-text-color); }
   .vmeta { color: var(--secondary-text-color); font-size: .84rem; margin-top: 3px; font-variant-numeric: tabular-nums; }
@@ -412,6 +419,7 @@ class GardenIrrigationCard extends HTMLElement {
 
     const setup = this._currentSetup();
     if (setup) {
+      if (setup.enabled === false) card.classList.add("setup-off");
       // Rain-skip indicator sits above the schedule (view mode).
       const rainInfo = this._buildRainInfo(setup, this._skip[setup.entry_id]);
       if (rainInfo) card.appendChild(rainInfo);
@@ -429,7 +437,11 @@ class GardenIrrigationCard extends HTMLElement {
         card.appendChild(empty);
       }
       for (const zone of setup.zones) card.appendChild(this._buildZone(setup, zone));
-      if (setup.mode === "sequential" && setup.zones.length)
+      if (
+        setup.mode === "sequential" &&
+        setup.zones.length &&
+        setup.enabled !== false
+      )
         card.appendChild(this._buildSeqFooter(setup));
     }
 
@@ -490,6 +502,16 @@ class GardenIrrigationCard extends HTMLElement {
     const spacer = document.createElement("div");
     spacer.className = "spacer";
     header.appendChild(spacer);
+
+    // View mode: enable/disable the whole setup.
+    if (!this._edit && setup) {
+      const enabled = setup.enabled !== false;
+      const sw = this._switch(enabled, (v) =>
+        this._updateSetup(setup.entry_id, { enabled: v })
+      );
+      sw.title = enabled ? this._t("disable") : this._t("enable");
+      header.appendChild(sw);
+    }
 
     if (this._edit) {
       const addZone = document.createElement("button");
@@ -963,12 +985,27 @@ class GardenIrrigationCard extends HTMLElement {
 
     el.appendChild(info);
 
-    const actionWrap = document.createElement("div");
-    const action = document.createElement("button");
-    action.addEventListener("click", () => this._toggleRun(zone));
-    actionWrap.appendChild(action);
-    el.appendChild(actionWrap);
-    refs.action = action;
+    const setupEnabled = setup.enabled !== false;
+    const zoneEnabled = zone.enabled !== false;
+    if (!setupEnabled || !zoneEnabled) el.classList.add("disabled");
+
+    const actions = document.createElement("div");
+    actions.className = "vactions";
+    // Per-zone enable toggle (hidden when the whole setup is disabled).
+    if (setupEnabled) {
+      const sw = this._switch(zoneEnabled, (v) =>
+        this._updateZone(setup.entry_id, zone.zone_id, { enabled: v })
+      );
+      sw.title = zoneEnabled ? this._t("disable") : this._t("enable");
+      actions.appendChild(sw);
+      if (zoneEnabled) {
+        const action = document.createElement("button");
+        action.addEventListener("click", () => this._toggleRun(zone));
+        actions.appendChild(action);
+        refs.action = action;
+      }
+    }
+    el.appendChild(actions);
 
     this._refs[zone.zone_id] = refs;
     return el;
@@ -1252,10 +1289,12 @@ class GardenIrrigationCard extends HTMLElement {
         refs.pill.hidden = !running;
         if (running) refs.pillText.textContent = this._t(source);
         refs.progress.hidden = !running;
-        refs.action.className = running ? "stop" : "";
-        refs.action.innerHTML = running
-          ? `<ha-icon icon="mdi:stop"></ha-icon> ${this._t("stop")}`
-          : `<ha-icon icon="mdi:play"></ha-icon> ${this._t("run")}`;
+        if (refs.action) {
+          refs.action.className = running ? "stop" : "";
+          refs.action.innerHTML = running
+            ? `<ha-icon icon="mdi:stop"></ha-icon> ${this._t("stop")}`
+            : `<ha-icon icon="mdi:play"></ha-icon> ${this._t("run")}`;
+        }
         continue;
       }
 
@@ -1453,6 +1492,20 @@ class GardenIrrigationCard extends HTMLElement {
       wrap.appendChild(b);
     });
     return { wrap, get: () => WEEKDAYS.filter((x) => sel.has(x)) };
+  }
+
+  _switch(checked, onChange) {
+    if (customElements.get("ha-switch")) {
+      const s = document.createElement("ha-switch");
+      s.checked = !!checked;
+      s.addEventListener("change", (e) => onChange(e.target.checked));
+      return s;
+    }
+    const s = document.createElement("input");
+    s.type = "checkbox";
+    s.checked = !!checked;
+    s.addEventListener("change", () => onChange(s.checked));
+    return s;
   }
 
   _entityPicker(value, domains, onChange) {

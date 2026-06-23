@@ -23,6 +23,7 @@ CONF_TIME = "time"
 CONF_DAYS = "days"
 CONF_PRE_SCRIPT = "pre_script"
 CONF_POST_SCRIPT = "post_script"
+CONF_ENABLED = "enabled"  # soft enable/disable for a setup or a zone
 
 # Rain skip (per setup; applies to scheduled runs only)
 CONF_RAIN_ENTITY = "rain_entity"  # sensor / weather / binary_sensor
