@@ -255,6 +255,8 @@ class GardenIrrigationCard extends HTMLElement {
     if (setup) {
       if (this._edit) card.appendChild(this._buildSetupBar(setup));
       if (setup.mode === "sequential") card.appendChild(this._buildSeqBar(setup));
+      if (this._edit && setup.mode === "sequential")
+        card.appendChild(this._buildSeqScripts(setup));
       if (this._addZoneOpen && this._edit)
         card.appendChild(this._buildAddZoneForm(setup));
       if (setup.zones.length === 0 && !this._addZoneOpen) {
@@ -382,6 +384,22 @@ class GardenIrrigationCard extends HTMLElement {
 
   _buildSeqBar(setup) {
     return this._edit ? this._buildSeqBarEdit(setup) : this._buildSeqBarView(setup);
+  }
+
+  _buildSeqScripts(setup) {
+    const wrap = document.createElement("div");
+    wrap.className = "field-row";
+    wrap.appendChild(
+      this._scriptField("Pre-irrigation script", setup.pre_script, (v) =>
+        this._updateSetup(setup.entry_id, { pre_script: v || null })
+      )
+    );
+    wrap.appendChild(
+      this._scriptField("Post-irrigation script", setup.post_script, (v) =>
+        this._updateSetup(setup.entry_id, { post_script: v || null })
+      )
+    );
+    return wrap;
   }
 
   _buildSeqBarView(setup) {

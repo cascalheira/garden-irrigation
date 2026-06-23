@@ -104,6 +104,8 @@ def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         "mode": options.get(CONF_MODE, DEFAULT_MODE),
         "start_time": options.get(CONF_START_TIME, DEFAULT_START_TIME),
         "days": options.get(CONF_DAYS, list(WEEKDAYS)),
+        "pre_script": options.get(CONF_PRE_SCRIPT),
+        "post_script": options.get(CONF_POST_SCRIPT),
         "zones": zones,
     }
 
@@ -134,6 +136,8 @@ def ws_get(
         vol.Optional("mode", default=DEFAULT_MODE): vol.In(MODES),
         vol.Optional("start_time", default=DEFAULT_START_TIME): TIME_RE,
         vol.Optional("days", default=list(WEEKDAYS)): [vol.In(WEEKDAYS)],
+        vol.Optional("pre_script"): vol.Any(str, None),
+        vol.Optional("post_script"): vol.Any(str, None),
     }
 )
 @websocket_api.async_response
@@ -143,15 +147,18 @@ async def ws_add_setup(
     msg: dict[str, Any],
 ) -> None:
     """Create a new setup (config entry) via the import flow."""
+    data = {
+        CONF_NAME: msg["name"],
+        CONF_MODE: msg["mode"],
+        CONF_START_TIME: msg["start_time"][:5],
+        CONF_DAYS: msg["days"],
+    }
+    if msg.get("pre_script"):
+        data[CONF_PRE_SCRIPT] = msg["pre_script"]
+    if msg.get("post_script"):
+        data[CONF_POST_SCRIPT] = msg["post_script"]
     result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={"source": "import"},
-        data={
-            CONF_NAME: msg["name"],
-            CONF_MODE: msg["mode"],
-            CONF_START_TIME: msg["start_time"][:5],
-            CONF_DAYS: msg["days"],
-        },
+        DOMAIN, context={"source": "import"}, data=data
     )
     entry = result.get("result")
     connection.send_result(
@@ -168,6 +175,8 @@ async def ws_add_setup(
         vol.Optional("mode"): vol.In(MODES),
         vol.Optional("start_time"): TIME_RE,
         vol.Optional("days"): [vol.In(WEEKDAYS)],
+        vol.Optional("pre_script"): vol.Any(str, None),
+        vol.Optional("post_script"): vol.Any(str, None),
     }
 )
 @callback
@@ -189,6 +198,12 @@ def ws_update_setup(
         options[CONF_START_TIME] = msg["start_time"][:5]
     if "days" in msg:
         options[CONF_DAYS] = msg["days"]
+    for key in (CONF_PRE_SCRIPT, CONF_POST_SCRIPT):
+        if key in msg:
+            if msg[key]:
+                options[key] = msg[key]
+            else:
+                options.pop(key, None)
 
     title = msg.get("name", entry.title)
     hass.config_entries.async_update_entry(entry, title=title, options=options)

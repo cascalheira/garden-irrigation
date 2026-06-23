@@ -77,6 +77,10 @@ DURATION_SELECTOR = selector.NumberSelector(
     )
 )
 
+SCRIPT_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="script")
+)
+
 
 def _settings_schema() -> vol.Schema:
     return vol.Schema(
@@ -105,6 +109,8 @@ def _sequential_schema(defaults: dict[str, Any]) -> vol.Schema:
             vol.Required(
                 CONF_DAYS, default=defaults.get(CONF_DAYS, list(WEEKDAYS))
             ): DAYS_SELECTOR,
+            vol.Optional(CONF_PRE_SCRIPT): SCRIPT_SELECTOR,
+            vol.Optional(CONF_POST_SCRIPT): SCRIPT_SELECTOR,
         }
     )
 
@@ -165,6 +171,10 @@ class GardenIrrigationConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_START_TIME, DEFAULT_START_TIME
             )
             options[CONF_DAYS] = self._setup.get(CONF_DAYS, list(WEEKDAYS))
+            if self._setup.get(CONF_PRE_SCRIPT):
+                options[CONF_PRE_SCRIPT] = self._setup[CONF_PRE_SCRIPT]
+            if self._setup.get(CONF_POST_SCRIPT):
+                options[CONF_POST_SCRIPT] = self._setup[CONF_POST_SCRIPT]
         return self.async_create_entry(title=name, data={}, options=options)
 
     @staticmethod
@@ -194,21 +204,32 @@ class OptionsFlowHandler(OptionsFlow):
                     CONF_START_TIME, DEFAULT_START_TIME
                 )
                 new_options[CONF_DAYS] = user_input.get(CONF_DAYS, list(WEEKDAYS))
+                if user_input.get(CONF_PRE_SCRIPT):
+                    new_options[CONF_PRE_SCRIPT] = user_input[CONF_PRE_SCRIPT]
+                if user_input.get(CONF_POST_SCRIPT):
+                    new_options[CONF_POST_SCRIPT] = user_input[CONF_POST_SCRIPT]
             return self.async_create_entry(data=new_options)
 
-        schema = {
-            vol.Required(
-                CONF_MODE, default=options.get(CONF_MODE, DEFAULT_MODE)
-            ): MODE_SELECTOR,
-            vol.Optional(
-                CONF_START_TIME,
-                default=options.get(CONF_START_TIME, DEFAULT_START_TIME),
-            ): selector.TimeSelector(),
-            vol.Optional(
-                CONF_DAYS, default=options.get(CONF_DAYS, list(WEEKDAYS))
-            ): DAYS_SELECTOR,
-        }
-        return self.async_show_form(step_id="init", data_schema=vol.Schema(schema))
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_MODE, default=options.get(CONF_MODE, DEFAULT_MODE)
+                ): MODE_SELECTOR,
+                vol.Optional(
+                    CONF_START_TIME,
+                    default=options.get(CONF_START_TIME, DEFAULT_START_TIME),
+                ): selector.TimeSelector(),
+                vol.Optional(
+                    CONF_DAYS, default=options.get(CONF_DAYS, list(WEEKDAYS))
+                ): DAYS_SELECTOR,
+                vol.Optional(CONF_PRE_SCRIPT): SCRIPT_SELECTOR,
+                vol.Optional(CONF_POST_SCRIPT): SCRIPT_SELECTOR,
+            }
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(schema, options),
+        )
 
 
 class ZoneSubentryFlowHandler(ConfigSubentryFlow):

@@ -115,6 +115,16 @@ class IrrigationController:
         return self.entry.options.get(CONF_DAYS) or list(WEEKDAYS)
 
     @property
+    def pre_script(self) -> str | None:
+        """Sequential setup: script run once before the sequence starts."""
+        return self.entry.options.get(CONF_PRE_SCRIPT) or None
+
+    @property
+    def post_script(self) -> str | None:
+        """Sequential setup: script run once after the sequence ends."""
+        return self.entry.options.get(CONF_POST_SCRIPT) or None
+
+    @property
     def zones(self) -> dict[str, Zone]:
         """Return all configured zones, keyed by subentry id (in order)."""
         return {
@@ -284,13 +294,22 @@ class IrrigationController:
     # ----- execution -------------------------------------------------------------
 
     async def _run_chain(self) -> None:
-        """Run every zone in order; cancellation stops the remaining zones."""
+        """Run every zone in order; cancellation stops the remaining zones.
+
+        A setup-level pre-script runs once before the sequence and a post-script
+        runs once after it (even if the sequence is stopped early).
+        """
         _LOGGER.debug("Starting sequential chain for %s", self.entry.title)
         try:
+            if self.pre_script:
+                await self._run_script(self.pre_script)
             for zone in self.zones.values():
                 await self._water(zone, zone.duration * 60, "scheduled")
         except asyncio.CancelledError:
             _LOGGER.debug("Chain for %s stopped early", self.entry.title)
+        finally:
+            if self.post_script:
+                await asyncio.shield(self._run_script(self.post_script))
 
     async def _run_single(self, zone: Zone, seconds: int, source: str) -> None:
         try:

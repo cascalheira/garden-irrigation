@@ -17,7 +17,13 @@
         "description": "Pick when this setup starts and on which days. Zones run one after another in order.",
         "data": {
           "start_time": "Start time",
-          "days": "Days"
+          "days": "Days",
+          "pre_script": "Pre-irrigation script (optional)",
+          "post_script": "Post-irrigation script (optional)"
+        },
+        "data_description": {
+          "pre_script": "Script run and awaited once before the sequence starts (e.g. open the main supply).",
+          "post_script": "Script run and awaited once after the sequence finishes (e.g. close the main supply, notify)."
         }
       }
     }
@@ -26,11 +32,13 @@
     "step": {
       "init": {
         "title": "Setup options",
-        "description": "Choose the scheduling mode. Start time and days apply only to sequential setups.",
+        "description": "Choose the scheduling mode. Start time, days and pre/post scripts apply only to sequential setups.",
         "data": {
           "mode": "Scheduling mode",
           "start_time": "Start time (sequential)",
-          "days": "Days (sequential)"
+          "days": "Days (sequential)",
+          "pre_script": "Pre-irrigation script (sequential)",
+          "post_script": "Post-irrigation script (sequential)"
         }
       }
     }

@@ -23,7 +23,9 @@ and services — no YAML required.
 - **Stop in progress** — turn the zone switch off, call `garden_irrigation.stop`,
   or `garden_irrigation.stop_all`. Stopping a chained zone stops the whole chain.
 - **Pre / post scripts** — run and await a `script` entity before the valve opens
-  and after it closes (open main supply, send a notification, etc.).
+  and after it closes (open main supply, send a notification, etc.). Per-zone in
+  any setup, plus **setup-level** pre/post scripts for *sequential* setups that
+  run once around the whole sequence.
 - A **Time remaining** sensor per zone, with `next_run` and run metadata exposed as
   attributes.
 - A **dashboard card** with view/edit modes that manages setups, zones and
