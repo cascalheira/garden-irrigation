@@ -211,6 +211,19 @@ const STYLES = `
   .form .form-actions { display: flex; gap: 10px; justify-content: flex-end; }
   .empty { color: var(--secondary-text-color); margin-top: 12px; }
 
+  /* ---- Edit overlay ---- */
+  .overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding: 28px 16px; overflow: auto; }
+  .overlay-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(1px); }
+  .overlay-panel {
+    position: relative; z-index: 1; margin: auto;
+    width: min(880px, 96vw); max-height: calc(100vh - 56px); overflow: auto;
+    background: var(--ha-card-background, var(--card-background-color, #fff));
+    color: var(--primary-text-color);
+    border-radius: 18px; box-shadow: 0 12px 48px rgba(0,0,0,.4);
+    padding: 6px 18px 20px;
+  }
+  .overlay-panel .header { position: sticky; top: 0; z-index: 2; background: inherit; padding-top: 12px; }
+
   /* ---- View mode (compact, read-only) ---- */
   ha-card.view .header { padding-bottom: 8px; }
   .vzone { display: flex; align-items: center; gap: 14px; padding: 16px 6px; }
@@ -277,7 +290,8 @@ class GardenIrrigationCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._setups = [];
     this._fetched = false;
-    this._edit = false;
+    this._edit = false; // transient: true while building the edit overlay
+    this._editOpen = false; // whether the edit overlay is shown
     this._selected = null;
     this._addZoneOpen = false;
     this._addSetupOpen = false;
@@ -289,7 +303,7 @@ class GardenIrrigationCard extends HTMLElement {
 
   setConfig(config) {
     this._config = config || {};
-    this._edit = config && config.mode === "edit";
+    this._editOpen = !!(config && config.mode === "edit");
   }
 
   set hass(hass) {
@@ -375,7 +389,7 @@ class GardenIrrigationCard extends HTMLElement {
 
   _computeSig() {
     return JSON.stringify({
-      edit: this._edit,
+      editOpen: this._editOpen,
       selected: this._selected,
       addZone: this._addZoneOpen,
       addSetup: this._addSetupOpen,
@@ -390,7 +404,7 @@ class GardenIrrigationCard extends HTMLElement {
     const sig = this._computeSig();
     if (sig !== this._sig) {
       this._sig = sig;
-      this._build();
+      this._render();
     }
     this._update();
   }
@@ -407,14 +421,31 @@ class GardenIrrigationCard extends HTMLElement {
 
   /* ---------- build ---------- */
 
-  _build() {
+  _render() {
     this._refs = {};
     const root = document.createElement("div");
     const style = document.createElement("style");
     style.textContent = STYLES;
-    const card = document.createElement("ha-card");
-    card.classList.add(this._edit ? "edit" : "view");
+    root.appendChild(style);
 
+    // Main card is always the compact view.
+    this._edit = false;
+    const card = document.createElement("ha-card");
+    card.classList.add("view");
+    this._fillCard(card);
+    root.appendChild(card);
+
+    // Edit happens in a large overlay so nothing gets squished.
+    if (this._editOpen) {
+      this._edit = true;
+      root.appendChild(this._buildEditOverlay());
+      this._edit = false;
+    }
+
+    this.shadowRoot.replaceChildren(root);
+  }
+
+  _fillCard(card) {
     card.appendChild(this._buildHeader());
 
     if (this._setups.length === 0) {
@@ -424,44 +455,61 @@ class GardenIrrigationCard extends HTMLElement {
         ? this._t("noSetupsEdit")
         : this._t("noSetupsView");
       card.appendChild(empty);
-      if (this._addSetupOpen) card.appendChild(this._buildAddSetupForm());
-      root.append(style, card);
-      this.shadowRoot.replaceChildren(root);
+      if (this._addSetupOpen && this._edit)
+        card.appendChild(this._buildAddSetupForm());
       return;
     }
 
-    if (this._addSetupOpen) card.appendChild(this._buildAddSetupForm());
+    if (this._addSetupOpen && this._edit)
+      card.appendChild(this._buildAddSetupForm());
 
     const setup = this._currentSetup();
-    if (setup) {
-      if (setup.enabled === false) card.classList.add("setup-off");
-      // Rain-skip indicator sits above the schedule (view mode).
-      const rainInfo = this._buildRainInfo(setup, this._skip[setup.entry_id]);
-      if (rainInfo) card.appendChild(rainInfo);
-      if (this._edit) card.appendChild(this._buildSetupBar(setup));
-      if (setup.mode === "sequential") card.appendChild(this._buildSeqBar(setup));
-      if (this._edit && setup.mode === "sequential")
-        card.appendChild(this._buildSeqScripts(setup));
-      if (this._edit) card.appendChild(this._buildRainSkip(setup));
-      if (this._addZoneOpen && this._edit)
-        card.appendChild(this._buildAddZoneForm(setup));
-      if (setup.zones.length === 0 && !this._addZoneOpen) {
-        const empty = document.createElement("div");
-        empty.className = "empty";
-        empty.textContent = this._t("noZones");
-        card.appendChild(empty);
-      }
-      for (const zone of setup.zones) card.appendChild(this._buildZone(setup, zone));
-      if (
-        setup.mode === "sequential" &&
-        setup.zones.length &&
-        setup.enabled !== false
-      )
-        card.appendChild(this._buildSeqFooter(setup));
-    }
+    if (!setup) return;
 
-    root.append(style, card);
-    this.shadowRoot.replaceChildren(root);
+    if (setup.enabled === false) card.classList.add("setup-off");
+    const rainInfo = this._buildRainInfo(setup, this._skip[setup.entry_id]);
+    if (rainInfo) card.appendChild(rainInfo);
+    if (this._edit) card.appendChild(this._buildSetupBar(setup));
+    if (setup.mode === "sequential") card.appendChild(this._buildSeqBar(setup));
+    if (this._edit && setup.mode === "sequential")
+      card.appendChild(this._buildSeqScripts(setup));
+    if (this._edit) card.appendChild(this._buildRainSkip(setup));
+    if (this._addZoneOpen && this._edit)
+      card.appendChild(this._buildAddZoneForm(setup));
+    if (setup.zones.length === 0 && !this._addZoneOpen) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = this._t("noZones");
+      card.appendChild(empty);
+    }
+    for (const zone of setup.zones) card.appendChild(this._buildZone(setup, zone));
+    if (
+      !this._edit &&
+      setup.mode === "sequential" &&
+      setup.zones.length &&
+      setup.enabled !== false
+    )
+      card.appendChild(this._buildSeqFooter(setup));
+  }
+
+  _buildEditOverlay() {
+    const overlay = document.createElement("div");
+    overlay.className = "overlay";
+    const bg = document.createElement("div");
+    bg.className = "overlay-bg";
+    bg.addEventListener("click", () => this._closeEdit());
+    const panel = document.createElement("div");
+    panel.className = "overlay-panel";
+    this._fillCard(panel);
+    overlay.append(bg, panel);
+    return overlay;
+  }
+
+  _closeEdit() {
+    this._editOpen = false;
+    this._addZoneOpen = false;
+    this._addSetupOpen = false;
+    this._rebuild();
   }
 
   _buildHeader() {
@@ -548,17 +596,22 @@ class GardenIrrigationCard extends HTMLElement {
       header.appendChild(addSetup);
     }
 
+    const isEditCtx = this._edit;
     const modeBtn = document.createElement("button");
-    modeBtn.className = "icon-btn" + (this._edit ? " active" : "");
-    modeBtn.title = this._edit ? this._t("done") : this._t("edit");
-    modeBtn.innerHTML = this._edit
+    modeBtn.className = "icon-btn" + (isEditCtx ? " active" : "");
+    modeBtn.title = isEditCtx ? this._t("done") : this._t("edit");
+    modeBtn.innerHTML = isEditCtx
       ? `<ha-icon icon="mdi:check"></ha-icon>`
       : `<ha-icon icon="mdi:pencil"></ha-icon>`;
     modeBtn.addEventListener("click", () => {
-      this._edit = !this._edit;
-      this._addZoneOpen = false;
-      this._addSetupOpen = false;
-      this._rebuild();
+      if (isEditCtx) {
+        this._closeEdit();
+      } else {
+        this._editOpen = true;
+        this._addZoneOpen = false;
+        this._addSetupOpen = false;
+        this._rebuild();
+      }
     });
     header.appendChild(modeBtn);
 
