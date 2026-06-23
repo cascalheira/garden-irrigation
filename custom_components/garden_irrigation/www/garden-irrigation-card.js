@@ -75,8 +75,10 @@ const STR = {
     skipIfForecast: "Skip if rain forecast",
     tabZones: "Zones",
     tabSchedule: "Schedule",
+    tabScripts: "Scripts",
     tabRain: "Rain",
     specificHint: "Each zone has its own times — set them on the Zones tab.",
+    scriptsHint: "Sequence scripts apply to sequential setups. Per-zone scripts are on the Zones tab.",
   },
   pt: {
     title: "Rega do jardim",
@@ -134,8 +136,10 @@ const STR = {
     skipIfForecast: "Ignorar se houver previsão de chuva",
     tabZones: "Zonas",
     tabSchedule: "Agendamento",
+    tabScripts: "Scripts",
     tabRain: "Chuva",
     specificHint: "Cada zona tem os seus próprios horários — defina-os no separador Zonas.",
+    scriptsHint: "Os scripts da sequência aplicam-se a conjuntos sequenciais. Os scripts por zona estão no separador Zonas.",
   },
 };
 
@@ -240,6 +244,7 @@ const STYLES = `
   .tab:hover { background: transparent; color: var(--primary-text-color); }
   .tab.on { color: var(--primary-color); border-bottom-color: var(--primary-color); }
   .tab-body { padding-top: 14px; }
+  .zone-add-row { display: flex; margin-bottom: 12px; }
 
   /* ---- View mode (compact, read-only) ---- */
   ha-card.view .header { padding-bottom: 8px; }
@@ -549,11 +554,19 @@ class GardenIrrigationCard extends HTMLElement {
 
     if (this._tab === "rain") {
       body.appendChild(this._buildRainSkip(setup));
+    } else if (this._tab === "scripts") {
+      if (setup.mode === "sequential") {
+        body.appendChild(this._buildSeqScripts(setup));
+      } else {
+        const hint = document.createElement("div");
+        hint.className = "empty";
+        hint.textContent = this._t("scriptsHint");
+        body.appendChild(hint);
+      }
     } else if (this._tab === "schedule") {
       body.appendChild(this._buildSetupBar(setup));
       if (setup.mode === "sequential") {
         body.appendChild(this._buildSeqBar(setup));
-        body.appendChild(this._buildSeqScripts(setup));
       } else {
         const hint = document.createElement("div");
         hint.className = "empty";
@@ -562,6 +575,18 @@ class GardenIrrigationCard extends HTMLElement {
       }
     } else {
       // zones
+      const addRow = document.createElement("div");
+      addRow.className = "zone-add-row";
+      const addBtn = document.createElement("button");
+      addBtn.className = "add-zone";
+      addBtn.innerHTML = `<ha-icon icon="mdi:plus"></ha-icon> ${this._t("addZone")}`;
+      addBtn.addEventListener("click", () => {
+        this._addZoneOpen = !this._addZoneOpen;
+        this._rebuild();
+      });
+      addRow.appendChild(addBtn);
+      body.appendChild(addRow);
+
       if (this._addZoneOpen) body.appendChild(this._buildAddZoneForm(setup));
       if (setup.zones.length === 0 && !this._addZoneOpen) {
         const empty = document.createElement("div");
@@ -582,6 +607,7 @@ class GardenIrrigationCard extends HTMLElement {
     [
       ["zones", this._t("tabZones")],
       ["schedule", this._t("tabSchedule")],
+      ["scripts", this._t("tabScripts")],
       ["rain", this._t("tabRain")],
     ].forEach(([id, label]) => {
       const b = document.createElement("button");
@@ -668,17 +694,6 @@ class GardenIrrigationCard extends HTMLElement {
     }
 
     if (this._edit) {
-      const addZone = document.createElement("button");
-      addZone.className = "add-zone";
-      addZone.innerHTML = `<ha-icon icon="mdi:plus"></ha-icon> ${this._t("addZone")}`;
-      addZone.disabled = !setup;
-      addZone.addEventListener("click", () => {
-        this._addZoneOpen = !this._addZoneOpen;
-        this._tab = "zones";
-        this._rebuild();
-      });
-      header.appendChild(addZone);
-
       const addSetup = document.createElement("button");
       addSetup.innerHTML = `<ha-icon icon="mdi:folder-plus-outline"></ha-icon> ${this._t("addSetup")}`;
       addSetup.addEventListener("click", () => {
