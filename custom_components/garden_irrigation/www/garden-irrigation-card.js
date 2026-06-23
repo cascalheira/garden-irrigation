@@ -700,16 +700,6 @@ class GardenIrrigationCard extends HTMLElement {
       actions.appendChild(addSetup);
     }
 
-    // View mode: enable/disable the whole setup (sits next to the edit icon).
-    if (!this._edit && setup) {
-      const enabled = setup.enabled !== false;
-      const sw = this._switch(enabled, (v) =>
-        this._updateSetup(setup.entry_id, { enabled: v })
-      );
-      sw.title = enabled ? this._t("disable") : this._t("enable");
-      actions.appendChild(sw);
-    }
-
     const isEditCtx = this._edit;
     const modeBtn = document.createElement("button");
     modeBtn.className = "icon-btn ghost" + (isEditCtx ? " active" : "");
@@ -728,6 +718,16 @@ class GardenIrrigationCard extends HTMLElement {
       }
     });
     actions.appendChild(modeBtn);
+
+    // View mode: enable/disable toggle sits AFTER the edit icon.
+    if (!this._edit && setup) {
+      const enabled = setup.enabled !== false;
+      const sw = this._switch(enabled, (v) =>
+        this._updateSetup(setup.entry_id, { enabled: v })
+      );
+      sw.title = enabled ? this._t("disable") : this._t("enable");
+      actions.appendChild(sw);
+    }
 
     header.appendChild(actions);
     return header;
