@@ -279,8 +279,7 @@ const STYLES = `
   .rain-sec-label { font-weight: 600; font-size: .88rem; }
   .field-row.dim { opacity: .5; }
   input.num { font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); width: 100%; box-sizing: border-box; }
-  .seq-footer { display: flex; padding: 16px 6px 4px; margin-top: 6px; border-top: 1px solid var(--divider-color); }
-  .seq-footer button { flex: 1; justify-content: center; }
+  .seq-footer { display: flex; justify-content: center; padding: 16px 6px 4px; margin-top: 6px; border-top: 1px solid var(--divider-color); }
   .title-input { font: inherit; font-size: 1.3rem; font-weight: 700; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); min-width: 0; }
 `;
 
