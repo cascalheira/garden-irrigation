@@ -212,7 +212,7 @@ const STYLES = `
   .empty { color: var(--secondary-text-color); margin-top: 12px; }
 
   /* ---- View mode (compact, read-only) ---- */
-  ha-card.view .header { padding-bottom: 6px; }
+  ha-card.view .header { padding-bottom: 8px; }
   .vzone { display: flex; align-items: center; gap: 14px; padding: 16px 6px; }
   .vzone + .vzone { border-top: 1px solid var(--divider-color); }
   .vzone.running { background: rgba(3,169,244,.06); border-radius: 14px; margin: 4px 0; }
@@ -232,11 +232,11 @@ const STYLES = `
   .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary-color); }
   .seqbar.view {
     display: flex; align-items: center; gap: 10px;
-    margin: 2px 0 8px; padding: 10px 14px; border-radius: 12px;
+    margin: 0 0 14px; padding: 11px 14px; border-radius: 12px;
     font-size: .9rem; color: var(--secondary-text-color);
-    background: var(--secondary-background-color);
+    background: rgba(67, 160, 71, .10);
   }
-  .seqbar.view ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); flex: none; }
+  .seqbar.view ha-icon { --mdc-icon-size: 20px; color: var(--success-color, #43a047); flex: none; }
   .seqbar.view b { color: var(--primary-text-color); font-variant-numeric: tabular-nums; font-weight: 650; }
   .seqedit { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin-top: 10px; }
   .seqedit .lbl { color: var(--secondary-text-color); margin-right: 4px; }
@@ -252,7 +252,7 @@ const STYLES = `
   .skipwarn ha-icon { --mdc-icon-size: 20px; }
   .raininfo {
     display: flex; align-items: center; gap: 10px;
-    margin: 2px 0 8px; padding: 10px 14px; border-radius: 12px;
+    margin: 6px 0 10px; padding: 11px 14px; border-radius: 12px;
     font-size: .86rem; line-height: 1.35; color: var(--secondary-text-color);
     background: rgba(3, 169, 244, .07);
   }
