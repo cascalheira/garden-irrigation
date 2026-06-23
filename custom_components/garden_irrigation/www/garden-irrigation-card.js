@@ -64,6 +64,11 @@ const STR = {
     lookahead: "Look-ahead (h)",
     rainThreshold: "Rain amount (mm)",
     rainChance: "Rain chance (%)",
+    rainInfoPrefix: "Skips watering if ",
+    rainInfoOr: " or ",
+    rainInfoRecent: (mm, h) => `it rained <b>≥${mm} mm</b> in the last <b>${h} h</b>`,
+    rainInfoRecentBinary: (h) => `it rained in the last <b>${h} h</b>`,
+    rainInfoForecast: (p, h) => `<b>≥${p}%</b> rain is forecast within <b>${h} h</b>`,
   },
   pt: {
     title: "Rega do jardim",
@@ -110,6 +115,11 @@ const STR = {
     lookahead: "Período seguinte (h)",
     rainThreshold: "Quantidade de chuva (mm)",
     rainChance: "Probabilidade de chuva (%)",
+    rainInfoPrefix: "Não rega se ",
+    rainInfoOr: " ou ",
+    rainInfoRecent: (mm, h) => `choveu <b>≥${mm} mm</b> nas últimas <b>${h} h</b>`,
+    rainInfoRecentBinary: (h) => `choveu nas últimas <b>${h} h</b>`,
+    rainInfoForecast: (p, h) => `há previsão de chuva <b>≥${p}%</b> nas próximas <b>${h} h</b>`,
   },
 };
 
@@ -223,6 +233,14 @@ const STYLES = `
     background: rgba(214, 143, 0, .12);
   }
   .skipwarn ha-icon { --mdc-icon-size: 20px; }
+  .raininfo {
+    display: flex; align-items: center; gap: 10px;
+    margin: 2px 0 8px; padding: 10px 14px; border-radius: 12px;
+    font-size: .86rem; line-height: 1.35; color: var(--secondary-text-color);
+    background: rgba(3, 169, 244, .07);
+  }
+  .raininfo ha-icon { --mdc-icon-size: 20px; color: var(--primary-color); flex: none; }
+  .raininfo b { color: var(--primary-text-color); font-weight: 650; font-variant-numeric: tabular-nums; }
   .rainbox { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin-top: 12px; }
   .rainbox-title { font-weight: 600; font-size: .9rem; margin-bottom: 6px; }
   input.num { font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); width: 100%; box-sizing: border-box; }
@@ -394,12 +412,13 @@ class GardenIrrigationCard extends HTMLElement {
 
     const setup = this._currentSetup();
     if (setup) {
+      // Rain-skip indicator sits above the schedule (view mode).
+      const rainInfo = this._buildRainInfo(setup, this._skip[setup.entry_id]);
+      if (rainInfo) card.appendChild(rainInfo);
       if (this._edit) card.appendChild(this._buildSetupBar(setup));
       if (setup.mode === "sequential") card.appendChild(this._buildSeqBar(setup));
       if (this._edit && setup.mode === "sequential")
         card.appendChild(this._buildSeqScripts(setup));
-      const skip = this._skip[setup.entry_id];
-      if (skip && skip.would_skip) card.appendChild(this._buildSkipBanner(skip));
       if (this._edit) card.appendChild(this._buildRainSkip(setup));
       if (this._addZoneOpen && this._edit)
         card.appendChild(this._buildAddZoneForm(setup));
@@ -546,6 +565,36 @@ class GardenIrrigationCard extends HTMLElement {
     bar.appendChild(del);
 
     return bar;
+  }
+
+  _buildRainInfo(setup, skip) {
+    // Actively skipping right now → amber warning (both modes).
+    if (skip && skip.would_skip) return this._buildSkipBanner(skip);
+    // Edit mode has the full rain-skip config box instead.
+    if (this._edit) return null;
+    if (!setup.rain_entity && !setup.forecast_entity) return null;
+
+    const parts = [];
+    if (setup.rain_entity) {
+      const dom = setup.rain_entity.split(".")[0];
+      parts.push(
+        dom === "binary_sensor"
+          ? this._t("rainInfoRecentBinary", setup.rain_hours)
+          : this._t("rainInfoRecent", setup.rain_threshold, setup.rain_hours)
+      );
+    }
+    if (setup.forecast_entity) {
+      parts.push(
+        this._t("rainInfoForecast", setup.forecast_threshold, setup.forecast_hours)
+      );
+    }
+
+    const div = document.createElement("div");
+    div.className = "raininfo";
+    div.innerHTML =
+      `<ha-icon icon="mdi:weather-partly-rainy"></ha-icon>` +
+      `<span>${this._t("rainInfoPrefix")}${parts.join(this._t("rainInfoOr"))}</span>`;
+    return div;
   }
 
   _buildSkipBanner(skip) {

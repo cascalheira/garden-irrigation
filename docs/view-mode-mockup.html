@@ -87,6 +87,16 @@
   }
   .seqbar b { color: var(--primary-text-color); font-variant-numeric: tabular-nums; }
   .seqbar .spacer { flex: 1; }
+
+  /* Rain-skip info row (above the schedule) */
+  .raininfo {
+    display: flex; align-items: center; gap: 10px;
+    margin: 10px 2px 4px; padding: 10px 14px; border-radius: 12px;
+    font-size: .86rem; line-height: 1.35; color: var(--secondary-text-color);
+    background: rgba(3,169,244,.07);
+  }
+  .raininfo .ic { font-size: 18px; line-height: 0; }
+  .raininfo b { color: var(--primary-text-color); font-weight: 650; }
 </style>
 </head>
 <body>
@@ -100,6 +110,11 @@
       <span class="drop">💧</span>
       <h1>Garden watering</h1>
       <button class="btn ghost">✏️ Edit</button>
+    </div>
+
+    <div class="raininfo">
+      <span class="ic">🌦️</span>
+      <span>Skips watering if it rained <b>≥1 mm</b> in the last <b>12 h</b> or <b>≥60%</b> rain is forecast within <b>6 h</b></span>
     </div>
 
     <div class="zone">
