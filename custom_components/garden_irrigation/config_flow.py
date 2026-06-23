@@ -25,17 +25,27 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_DAYS,
     CONF_DURATION,
+    CONF_FORECAST_ENTITY,
+    CONF_FORECAST_HOURS,
+    CONF_FORECAST_THRESHOLD,
     CONF_MODE,
     CONF_NAME,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
+    CONF_RAIN_ENTITY,
+    CONF_RAIN_HOURS,
+    CONF_RAIN_THRESHOLD,
     CONF_SCHEDULES,
     CONF_START_TIME,
     CONF_START_TIMES,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
     DEFAULT_DURATION,
+    DEFAULT_FORECAST_HOURS,
+    DEFAULT_FORECAST_THRESHOLD,
     DEFAULT_MODE,
+    DEFAULT_RAIN_HOURS,
+    DEFAULT_RAIN_THRESHOLD,
     DEFAULT_START_TIME,
     DOMAIN,
     MAX_DURATION,
@@ -80,6 +90,32 @@ DURATION_SELECTOR = selector.NumberSelector(
 
 SCRIPT_SELECTOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="script")
+)
+
+RAIN_ENTITY_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain=["sensor", "weather", "binary_sensor"])
+)
+
+WEATHER_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="weather")
+)
+
+HOURS_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=1, max=72, step=1, unit_of_measurement="h", mode=selector.NumberSelectorMode.BOX
+    )
+)
+
+MM_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=0, max=50, step=0.1, unit_of_measurement="mm", mode=selector.NumberSelectorMode.BOX
+    )
+)
+
+PERCENT_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=0, max=100, step=5, unit_of_measurement="%", mode=selector.NumberSelectorMode.SLIDER
+    )
 )
 
 
@@ -232,11 +268,24 @@ class OptionsFlowHandler(OptionsFlow):
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._opts[CONF_MODE] = user_input[CONF_MODE]
-            for key in (CONF_PRE_SCRIPT, CONF_POST_SCRIPT):
+            for key in (
+                CONF_PRE_SCRIPT,
+                CONF_POST_SCRIPT,
+                CONF_RAIN_ENTITY,
+                CONF_FORECAST_ENTITY,
+            ):
                 if user_input.get(key):
                     self._opts[key] = user_input[key]
                 else:
                     self._opts.pop(key, None)
+            for key in (
+                CONF_RAIN_HOURS,
+                CONF_RAIN_THRESHOLD,
+                CONF_FORECAST_HOURS,
+                CONF_FORECAST_THRESHOLD,
+            ):
+                if user_input.get(key) is not None:
+                    self._opts[key] = user_input[key]
             if user_input[CONF_MODE] != MODE_SEQUENTIAL:
                 return await self.async_step_finish()
             return await self.async_step_menu()
@@ -248,6 +297,26 @@ class OptionsFlowHandler(OptionsFlow):
                 ): MODE_SELECTOR,
                 vol.Optional(CONF_PRE_SCRIPT): SCRIPT_SELECTOR,
                 vol.Optional(CONF_POST_SCRIPT): SCRIPT_SELECTOR,
+                vol.Optional(CONF_RAIN_ENTITY): RAIN_ENTITY_SELECTOR,
+                vol.Optional(
+                    CONF_RAIN_HOURS,
+                    default=self._opts.get(CONF_RAIN_HOURS, DEFAULT_RAIN_HOURS),
+                ): HOURS_SELECTOR,
+                vol.Optional(
+                    CONF_RAIN_THRESHOLD,
+                    default=self._opts.get(CONF_RAIN_THRESHOLD, DEFAULT_RAIN_THRESHOLD),
+                ): MM_SELECTOR,
+                vol.Optional(CONF_FORECAST_ENTITY): WEATHER_SELECTOR,
+                vol.Optional(
+                    CONF_FORECAST_HOURS,
+                    default=self._opts.get(CONF_FORECAST_HOURS, DEFAULT_FORECAST_HOURS),
+                ): HOURS_SELECTOR,
+                vol.Optional(
+                    CONF_FORECAST_THRESHOLD,
+                    default=self._opts.get(
+                        CONF_FORECAST_THRESHOLD, DEFAULT_FORECAST_THRESHOLD
+                    ),
+                ): PERCENT_SELECTOR,
             }
         )
         return self.async_show_form(
@@ -320,6 +389,17 @@ class OptionsFlowHandler(OptionsFlow):
             for key in (CONF_PRE_SCRIPT, CONF_POST_SCRIPT):
                 if self._opts.get(key):
                     new_options[key] = self._opts[key]
+        # Rain skip applies to both modes.
+        for key in (
+            CONF_RAIN_ENTITY,
+            CONF_RAIN_HOURS,
+            CONF_RAIN_THRESHOLD,
+            CONF_FORECAST_ENTITY,
+            CONF_FORECAST_HOURS,
+            CONF_FORECAST_THRESHOLD,
+        ):
+            if self._opts.get(key) not in (None, ""):
+                new_options[key] = self._opts[key]
         return self.async_create_entry(data=new_options)
 
     def _summary(self) -> str:

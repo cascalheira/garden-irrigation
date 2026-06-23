@@ -55,6 +55,15 @@ const STR = {
     removeStartFail: (e) => `Could not remove start time: ${e}`,
     addSchedFail: (e) => `Could not add schedule: ${e}`,
     removeSchedFail: (e) => `Could not remove schedule: ${e}`,
+    skipRain: "Scheduled watering will be skipped — recent rain",
+    skipForecast: "Scheduled watering will be skipped — rain forecast",
+    rainSkipTitle: "Rain skip (scheduled runs)",
+    rainEntity: "Rain sensor / weather",
+    forecastEntity: "Weather (forecast)",
+    lookback: "Look-back (h)",
+    lookahead: "Look-ahead (h)",
+    rainThreshold: "Rain amount (mm)",
+    rainChance: "Rain chance (%)",
   },
   pt: {
     title: "Rega do jardim",
@@ -92,6 +101,15 @@ const STR = {
     removeStartFail: (e) => `Não foi possível remover a hora de início: ${e}`,
     addSchedFail: (e) => `Não foi possível adicionar o agendamento: ${e}`,
     removeSchedFail: (e) => `Não foi possível remover o agendamento: ${e}`,
+    skipRain: "A rega agendada será ignorada — choveu recentemente",
+    skipForecast: "A rega agendada será ignorada — previsão de chuva",
+    rainSkipTitle: "Ignorar com chuva (execuções agendadas)",
+    rainEntity: "Sensor de chuva / meteorologia",
+    forecastEntity: "Meteorologia (previsão)",
+    lookback: "Período anterior (h)",
+    lookahead: "Período seguinte (h)",
+    rainThreshold: "Quantidade de chuva (mm)",
+    rainChance: "Probabilidade de chuva (%)",
   },
 };
 
@@ -196,6 +214,16 @@ const STYLES = `
   .warn { color: var(--error-color); font-size: .85rem; margin-top: 8px; }
   /* [hidden] must win over the display rules above */
   .pill[hidden], .vprogress[hidden] { display: none; }
+  .skipwarn {
+    display: flex; align-items: center; gap: 9px; margin-top: 12px;
+    padding: 10px 14px; border-radius: 12px; font-size: .9rem; font-weight: 500;
+    color: var(--warning-color, #d68f00);
+    background: rgba(214, 143, 0, .12);
+  }
+  .skipwarn ha-icon { --mdc-icon-size: 20px; }
+  .rainbox { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin-top: 12px; }
+  .rainbox-title { font-weight: 600; font-size: .9rem; margin-bottom: 6px; }
+  input.num { font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); width: 100%; box-sizing: border-box; }
   .seq-footer { display: flex; padding: 16px 6px 4px; margin-top: 6px; border-top: 1px solid var(--divider-color); }
   .seq-footer button { flex: 1; justify-content: center; }
   .title-input { font: inherit; font-size: 1.3rem; font-weight: 700; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); min-width: 0; }
@@ -213,6 +241,7 @@ class GardenIrrigationCard extends HTMLElement {
     this._addSetupOpen = false;
     this._sig = null;
     this._refs = {};
+    this._skip = {};
     this._tick = this._tick.bind(this);
   }
 
@@ -273,12 +302,27 @@ class GardenIrrigationCard extends HTMLElement {
     }
     this._sig = null;
     this._sync();
+    this._fetchSkip();
 
     clearTimeout(this._retry);
     const cur = this._currentSetup();
     if (cur && cur.zones.some((z) => !z.entity_id)) {
       this._retry = setTimeout(() => this._fetch(), 1000);
     }
+  }
+
+  async _fetchSkip() {
+    const setup = this._currentSetup();
+    if (!setup) return;
+    try {
+      this._skip[setup.entry_id] = await this._ws({
+        type: "garden_irrigation/skip_status",
+        entry_id: setup.entry_id,
+      });
+    } catch (e) {
+      this._skip[setup.entry_id] = { would_skip: false };
+    }
+    this._rebuild();
   }
 
   _currentSetup() {
@@ -295,6 +339,7 @@ class GardenIrrigationCard extends HTMLElement {
       addSetup: this._addSetupOpen,
       error: this._error,
       setups: this._setups,
+      skip: this._skip,
     });
   }
 
@@ -351,6 +396,9 @@ class GardenIrrigationCard extends HTMLElement {
       if (setup.mode === "sequential") card.appendChild(this._buildSeqBar(setup));
       if (this._edit && setup.mode === "sequential")
         card.appendChild(this._buildSeqScripts(setup));
+      const skip = this._skip[setup.entry_id];
+      if (skip && skip.would_skip) card.appendChild(this._buildSkipBanner(skip));
+      if (this._edit) card.appendChild(this._buildRainSkip(setup));
       if (this._addZoneOpen && this._edit)
         card.appendChild(this._buildAddZoneForm(setup));
       if (setup.zones.length === 0 && !this._addZoneOpen) {
@@ -392,6 +440,7 @@ class GardenIrrigationCard extends HTMLElement {
       sel.addEventListener("change", () => {
         this._selected = sel.value;
         this._rebuild();
+        this._fetchSkip();
       });
       header.appendChild(sel);
     }
@@ -494,6 +543,104 @@ class GardenIrrigationCard extends HTMLElement {
     bar.appendChild(del);
 
     return bar;
+  }
+
+  _buildSkipBanner(skip) {
+    const div = document.createElement("div");
+    div.className = "skipwarn";
+    const text =
+      skip.reason === "rain_forecast"
+        ? this._t("skipForecast")
+        : this._t("skipRain");
+    div.innerHTML = `<ha-icon icon="mdi:weather-rainy"></ha-icon><span>${this._escape(
+      text
+    )}</span>`;
+    return div;
+  }
+
+  _buildRainSkip(setup) {
+    const box = document.createElement("div");
+    box.className = "rainbox";
+    const h = document.createElement("div");
+    h.className = "rainbox-title";
+    h.textContent = this._t("rainSkipTitle");
+    box.appendChild(h);
+
+    const r1 = document.createElement("div");
+    r1.className = "field-row";
+    r1.appendChild(
+      this._labeledField(
+        this._t("rainEntity"),
+        this._entityPicker(
+          setup.rain_entity,
+          ["sensor", "weather", "binary_sensor"],
+          (v) => this._updateSetup(setup.entry_id, { rain_entity: v || null })
+        ).el
+      )
+    );
+    r1.appendChild(
+      this._numField(this._t("lookback"), setup.rain_hours, 1, 72, 1, (v) =>
+        this._updateSetup(setup.entry_id, { rain_hours: v })
+      )
+    );
+    r1.appendChild(
+      this._numField(this._t("rainThreshold"), setup.rain_threshold, 0, 50, 0.1, (v) =>
+        this._updateSetup(setup.entry_id, { rain_threshold: v })
+      )
+    );
+    box.appendChild(r1);
+
+    const r2 = document.createElement("div");
+    r2.className = "field-row";
+    r2.appendChild(
+      this._labeledField(
+        this._t("forecastEntity"),
+        this._entityPicker(setup.forecast_entity, ["weather"], (v) =>
+          this._updateSetup(setup.entry_id, { forecast_entity: v || null })
+        ).el
+      )
+    );
+    r2.appendChild(
+      this._numField(this._t("lookahead"), setup.forecast_hours, 1, 72, 1, (v) =>
+        this._updateSetup(setup.entry_id, { forecast_hours: v })
+      )
+    );
+    r2.appendChild(
+      this._numField(this._t("rainChance"), setup.forecast_threshold, 0, 100, 5, (v) =>
+        this._updateSetup(setup.entry_id, { forecast_threshold: v })
+      )
+    );
+    box.appendChild(r2);
+    return box;
+  }
+
+  _labeledField(label, el) {
+    const f = document.createElement("div");
+    f.className = "field";
+    const l = document.createElement("label");
+    l.textContent = label;
+    f.append(l, el);
+    return f;
+  }
+
+  _numField(label, value, min, max, step, onChange) {
+    const f = document.createElement("div");
+    f.className = "field";
+    const l = document.createElement("label");
+    l.textContent = label;
+    const i = document.createElement("input");
+    i.type = "number";
+    i.className = "num";
+    i.min = min;
+    i.max = max;
+    i.step = step;
+    i.value = value != null ? value : "";
+    i.addEventListener("change", () => {
+      const v = parseFloat(i.value);
+      if (!isNaN(v)) onChange(v);
+    });
+    f.append(l, i);
+    return f;
   }
 
   _buildSeqBar(setup) {

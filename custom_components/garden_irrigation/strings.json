@@ -41,12 +41,22 @@
         }
       },
       "settings": {
-        "title": "Scheduling mode & scripts",
-        "description": "Specific setups schedule each zone separately. Sequential setups run all zones in order from the start time(s) below; the scripts run once around the whole sequence.",
+        "title": "Scheduling, scripts & rain skip",
+        "description": "Specific setups schedule each zone separately. Sequential setups run all zones in order from the start time(s) below; the scripts run once around the whole sequence. Rain skip applies to scheduled runs only.",
         "data": {
           "mode": "Scheduling mode",
           "pre_script": "Pre-irrigation script (sequential)",
-          "post_script": "Post-irrigation script (sequential)"
+          "post_script": "Post-irrigation script (sequential)",
+          "rain_entity": "Recent-rain entity (sensor / weather / binary)",
+          "rain_hours": "Recent rain — look-back (hours)",
+          "rain_threshold": "Recent rain — amount threshold (mm)",
+          "forecast_entity": "Forecast weather entity",
+          "forecast_hours": "Forecast — look-ahead (hours)",
+          "forecast_threshold": "Forecast — rain chance threshold (%)"
+        },
+        "data_description": {
+          "rain_entity": "Skip a scheduled run if this shows rain in the look-back window. A weather entity uses its current precipitation; a binary sensor counts any 'on'.",
+          "forecast_entity": "Skip a scheduled run if this weather entity forecasts rain above the chance threshold within the look-ahead window."
         }
       },
       "add_start": {

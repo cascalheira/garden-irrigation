@@ -29,22 +29,35 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_DAYS,
     CONF_DURATION,
+    CONF_FORECAST_ENTITY,
+    CONF_FORECAST_HOURS,
+    CONF_FORECAST_THRESHOLD,
     CONF_MODE,
     CONF_NAME,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
+    CONF_RAIN_ENTITY,
+    CONF_RAIN_HOURS,
+    CONF_RAIN_THRESHOLD,
     CONF_SCHEDULES,
     CONF_START_TIME,
     CONF_START_TIMES,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
     DEFAULT_DURATION,
+    DEFAULT_FORECAST_HOURS,
+    DEFAULT_FORECAST_THRESHOLD,
     DEFAULT_MODE,
+    DEFAULT_RAIN_HOURS,
+    DEFAULT_RAIN_THRESHOLD,
     DOMAIN,
+    EVENT_SKIPPED,
     ISSUE_COLLISION,
     ISSUE_OVERLAP,
     MODE_SEQUENTIAL,
     SIGNAL_UPDATE,
+    SKIP_FORECAST,
+    SKIP_RECENT,
     SUBENTRY_TYPE_ZONE,
     WEEKDAYS,
 )
@@ -102,6 +115,7 @@ class IrrigationController:
         self._running: dict[str, RunState] = {}
         self._chain_task: asyncio.Task | None = None
         self._unsub_time: list[Callable[[], None]] = []
+        self._last_skip: dict[str, Any] | None = None
 
     # ----- configuration helpers -------------------------------------------------
 
@@ -222,6 +236,13 @@ class IrrigationController:
         weekday = WEEKDAYS[dt_util.as_local(now).weekday()]
         if weekday not in days:
             return
+        self.hass.async_create_task(self._scheduled_chain())
+
+    async def _scheduled_chain(self) -> None:
+        reason = await self.async_skip_reason()
+        if reason:
+            self._record_skip(reason)
+            return
         self.async_run_chain()
 
     @callback
@@ -233,9 +254,14 @@ class IrrigationController:
         weekday = WEEKDAYS[dt_util.as_local(now).weekday()]
         if weekday not in days:
             return
-        self.hass.async_create_task(
-            self.async_start_zone(zone_id, source="scheduled")
-        )
+        self.hass.async_create_task(self._scheduled_zone(zone_id))
+
+    async def _scheduled_zone(self, zone_id: str) -> None:
+        reason = await self.async_skip_reason()
+        if reason:
+            self._record_skip(reason)
+            return
+        await self.async_start_zone(zone_id, source="scheduled")
 
     # ----- public control surface ------------------------------------------------
 
@@ -394,6 +420,128 @@ class IrrigationController:
     @callback
     def _notify(self) -> None:
         async_dispatcher_send(self.hass, f"{SIGNAL_UPDATE}_{self.entry.entry_id}")
+
+    # ----- rain skip -------------------------------------------------------------
+
+    @property
+    def last_skip(self) -> dict[str, Any] | None:
+        return self._last_skip
+
+    async def async_skip_reason(self) -> str | None:
+        """Return a skip reason (SKIP_*) if a scheduled run should be skipped now."""
+        if await self._recent_rain():
+            return SKIP_RECENT
+        if await self._rain_forecast():
+            return SKIP_FORECAST
+        return None
+
+    async def _recent_rain(self) -> bool:
+        """True if the configured rain entity shows rain within the look-back window."""
+        entity_id = self.entry.options.get(CONF_RAIN_ENTITY)
+        if not entity_id:
+            return False
+        hours = float(self.entry.options.get(CONF_RAIN_HOURS, DEFAULT_RAIN_HOURS))
+        threshold = float(
+            self.entry.options.get(CONF_RAIN_THRESHOLD, DEFAULT_RAIN_THRESHOLD)
+        )
+        domain = entity_id.split(".", 1)[0]
+        start = dt_util.utcnow() - timedelta(hours=hours)
+
+        try:
+            from homeassistant.components.recorder import get_instance, history
+
+            recorded = await get_instance(self.hass).async_add_executor_job(
+                partial(
+                    history.state_changes_during_period,
+                    self.hass,
+                    start,
+                    None,
+                    entity_id,
+                    include_start_time_state=True,
+                    no_attributes=False,
+                )
+            )
+        except Exception:  # recorder unavailable
+            recorded = {}
+
+        series = list(recorded.get(entity_id, []))
+        current = self.hass.states.get(entity_id)
+        if current is not None:
+            series.append(current)
+
+        if domain == "binary_sensor":
+            return any(getattr(s, "state", None) == "on" for s in series)
+
+        values = [
+            v for v in (self._precip_value(s, domain) for s in series) if v is not None
+        ]
+        return bool(values) and max(values) >= threshold
+
+    @staticmethod
+    def _precip_value(state: Any, domain: str) -> float | None:
+        try:
+            if domain == "weather":
+                val = state.attributes.get("precipitation")
+                return float(val) if val is not None else None
+            if state.state in ("unknown", "unavailable", "", None):
+                return None
+            return float(state.state)
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    async def _rain_forecast(self) -> bool:
+        """True if the forecast shows a high chance of rain within the look-ahead window."""
+        entity_id = self.entry.options.get(CONF_FORECAST_ENTITY)
+        if not entity_id:
+            return False
+        hours = int(self.entry.options.get(CONF_FORECAST_HOURS, DEFAULT_FORECAST_HOURS))
+        threshold = float(
+            self.entry.options.get(CONF_FORECAST_THRESHOLD, DEFAULT_FORECAST_THRESHOLD)
+        )
+
+        try:
+            response = await self.hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": entity_id, "type": "hourly"},
+                blocking=True,
+                return_response=True,
+            )
+        except Exception:
+            return False
+
+        forecasts = (response or {}).get(entity_id, {}).get("forecast", [])
+        now = dt_util.utcnow()
+        horizon = now + timedelta(hours=hours)
+        for item in forecasts:
+            when = item.get("datetime")
+            if isinstance(when, str):
+                when = dt_util.parse_datetime(when)
+            if when is None:
+                continue
+            when = dt_util.as_utc(when)
+            if when < now - timedelta(hours=1) or when > horizon:
+                continue
+            prob = item.get("precipitation_probability")
+            if prob is not None and float(prob) >= threshold:
+                return True
+        return False
+
+    @callback
+    def _record_skip(self, reason: str) -> None:
+        self._last_skip = {"reason": reason, "at": dt_util.utcnow().isoformat()}
+        _LOGGER.info(
+            "Skipping scheduled irrigation for %s (%s)", self.entry.title, reason
+        )
+        self.hass.bus.async_fire(
+            EVENT_SKIPPED,
+            {
+                "entry_id": self.entry.entry_id,
+                "setup": self.entry.title,
+                "reason": reason,
+            },
+        )
+        self._notify()
 
     @callback
     def _update_overlap_issue(self) -> None:

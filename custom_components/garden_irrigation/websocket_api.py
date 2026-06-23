@@ -20,17 +20,27 @@ from homeassistant.helpers import entity_registry as er
 from .const import (
     CONF_DAYS,
     CONF_DURATION,
+    CONF_FORECAST_ENTITY,
+    CONF_FORECAST_HOURS,
+    CONF_FORECAST_THRESHOLD,
     CONF_MODE,
     CONF_NAME,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
+    CONF_RAIN_ENTITY,
+    CONF_RAIN_HOURS,
+    CONF_RAIN_THRESHOLD,
     CONF_SCHEDULES,
     CONF_START_TIME,
     CONF_START_TIMES,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
     DEFAULT_DURATION,
+    DEFAULT_FORECAST_HOURS,
+    DEFAULT_FORECAST_THRESHOLD,
     DEFAULT_MODE,
+    DEFAULT_RAIN_HOURS,
+    DEFAULT_RAIN_THRESHOLD,
     DEFAULT_START_TIME,
     DOMAIN,
     MAX_DURATION,
@@ -55,6 +65,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         ws_remove_start_time,
         ws_run_setup,
         ws_stop_setup,
+        ws_skip_status,
         ws_add_zone,
         ws_update_zone,
         ws_delete_zone,
@@ -120,6 +131,14 @@ def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         "start_times": _start_times(options),
         "pre_script": options.get(CONF_PRE_SCRIPT),
         "post_script": options.get(CONF_POST_SCRIPT),
+        "rain_entity": options.get(CONF_RAIN_ENTITY),
+        "rain_hours": options.get(CONF_RAIN_HOURS, DEFAULT_RAIN_HOURS),
+        "rain_threshold": options.get(CONF_RAIN_THRESHOLD, DEFAULT_RAIN_THRESHOLD),
+        "forecast_entity": options.get(CONF_FORECAST_ENTITY),
+        "forecast_hours": options.get(CONF_FORECAST_HOURS, DEFAULT_FORECAST_HOURS),
+        "forecast_threshold": options.get(
+            CONF_FORECAST_THRESHOLD, DEFAULT_FORECAST_THRESHOLD
+        ),
         "total_duration": sum(
             int(sub.data.get(CONF_DURATION, DEFAULT_DURATION))
             for sub in entry.subentries.values()
@@ -196,6 +215,12 @@ async def ws_add_setup(
         vol.Optional("days"): [vol.In(WEEKDAYS)],
         vol.Optional("pre_script"): vol.Any(str, None),
         vol.Optional("post_script"): vol.Any(str, None),
+        vol.Optional("rain_entity"): vol.Any(str, None),
+        vol.Optional("rain_hours"): vol.Coerce(float),
+        vol.Optional("rain_threshold"): vol.Coerce(float),
+        vol.Optional("forecast_entity"): vol.Any(str, None),
+        vol.Optional("forecast_hours"): vol.Coerce(float),
+        vol.Optional("forecast_threshold"): vol.Coerce(float),
     }
 )
 @callback
@@ -217,12 +242,25 @@ def ws_update_setup(
         options[CONF_START_TIME] = msg["start_time"][:5]
     if "days" in msg:
         options[CONF_DAYS] = msg["days"]
-    for key in (CONF_PRE_SCRIPT, CONF_POST_SCRIPT):
+    for key in (
+        CONF_PRE_SCRIPT,
+        CONF_POST_SCRIPT,
+        CONF_RAIN_ENTITY,
+        CONF_FORECAST_ENTITY,
+    ):
         if key in msg:
             if msg[key]:
                 options[key] = msg[key]
             else:
                 options.pop(key, None)
+    for key in (
+        CONF_RAIN_HOURS,
+        CONF_RAIN_THRESHOLD,
+        CONF_FORECAST_HOURS,
+        CONF_FORECAST_THRESHOLD,
+    ):
+        if key in msg and msg[key] is not None:
+            options[key] = msg[key]
 
     title = msg.get("name", entry.title)
     hass.config_entries.async_update_entry(entry, title=title, options=options)
@@ -307,6 +345,35 @@ def ws_remove_start_time(
     options.pop(CONF_START_TIME, None)
     hass.config_entries.async_update_entry(entry, options=options)
     connection.send_result(msg["id"], _setup_payload(hass, entry))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/skip_status",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_skip_status(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Report whether a scheduled run would currently be skipped (rain)."""
+    entry = _entry(hass, msg["entry_id"])
+    controller = getattr(entry, "runtime_data", None) if entry else None
+    if controller is None:
+        connection.send_result(msg["id"], {"would_skip": False, "reason": None})
+        return
+    reason = await controller.async_skip_reason()
+    connection.send_result(
+        msg["id"],
+        {
+            "would_skip": reason is not None,
+            "reason": reason,
+            "last_skip": controller.last_skip,
+        },
+    )
 
 
 @websocket_api.require_admin

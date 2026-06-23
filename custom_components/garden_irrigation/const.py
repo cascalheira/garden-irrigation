@@ -24,6 +24,23 @@ CONF_DAYS = "days"
 CONF_PRE_SCRIPT = "pre_script"
 CONF_POST_SCRIPT = "post_script"
 
+# Rain skip (per setup; applies to scheduled runs only)
+CONF_RAIN_ENTITY = "rain_entity"  # sensor / weather / binary_sensor
+CONF_RAIN_HOURS = "rain_hours"
+CONF_RAIN_THRESHOLD = "rain_threshold"  # mm
+CONF_FORECAST_ENTITY = "forecast_entity"  # weather entity
+CONF_FORECAST_HOURS = "forecast_hours"
+CONF_FORECAST_THRESHOLD = "forecast_threshold"  # %
+
+DEFAULT_RAIN_HOURS = 12
+DEFAULT_RAIN_THRESHOLD = 1.0
+DEFAULT_FORECAST_HOURS = 6
+DEFAULT_FORECAST_THRESHOLD = 60
+
+SKIP_RECENT = "rain_recent"
+SKIP_FORECAST = "rain_forecast"
+EVENT_SKIPPED = f"{DOMAIN}_skipped"
+
 # Scheduling modes
 MODE_SEQUENTIAL = "sequential"  # one setup start time; zones run back-to-back
 MODE_SPECIFIC = "specific"  # each zone has its own schedule(s)

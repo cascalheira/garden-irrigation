@@ -20,6 +20,11 @@ and services — no YAML required.
   duration of **1–60 minutes**.
 - **Discreet overlap warning** — in *specific* mode, overlapping schedules raise a
   non-blocking warning while editing *and* a Home Assistant repair issue.
+- **Rain skip** (per setup, scheduled runs only) — skip watering if it **rained
+  recently** (a precipitation/weather/binary sensor over a look-back window) or if
+  there's a **high chance of rain soon** (a weather entity's hourly forecast).
+  Either condition shows a **warning on the card** before the run and fires a
+  `garden_irrigation_skipped` event. Manual runs always water.
 - **Manual activation** — every zone is a switch entity you can toggle from any
   dashboard, plus `garden_irrigation.start` (with optional duration override).
 - **Stop in progress** — turn the zone switch off, call `garden_irrigation.stop`,
