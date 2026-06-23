@@ -174,6 +174,10 @@ const STYLES = `
   .icon-btn ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); }
   .icon-btn.active { border-color: var(--primary-color); }
   .icon-btn.active ha-icon { color: var(--primary-color); }
+  .icon-btn.ghost { border-color: transparent; background: transparent; }
+  .icon-btn.ghost:hover { background: var(--secondary-background-color); }
+  .icon-btn.ghost ha-icon { --mdc-icon-size: 19px; opacity: .75; }
+  .head-actions { display: flex; align-items: center; gap: 6px; }
   .toggle { display: inline-flex; border: 1px solid var(--divider-color); border-radius: 10px; overflow: hidden; }
   .toggle button { border: none; border-radius: 0; padding: 6px 12px; }
   .toggle button.on { background: var(--primary-color); color: var(--text-primary-color, #fff); }
@@ -252,8 +256,9 @@ const STYLES = `
   .vzone.running + .vzone { border-top: none; }
   .vzone.disabled .info { opacity: .45; }
   .vactions { display: flex; align-items: center; gap: 12px; flex: none; }
-  .runbtn { padding: 8px 12px; }
-  .runbtn ha-icon { --mdc-icon-size: 22px; }
+  .runbtn { padding: 8px 12px; border: none; background: transparent; }
+  .runbtn:hover { background: var(--secondary-background-color); }
+  .runbtn ha-icon { --mdc-icon-size: 24px; }
   .setup-off .seqbar, .setup-off .raininfo { opacity: .5; }
   .vzone .info { flex: 1; min-width: 0; }
   .vname { font-weight: 650; font-size: 1.05rem; display: flex; align-items: center; gap: 9px; color: var(--primary-text-color); }
@@ -681,15 +686,9 @@ class GardenIrrigationCard extends HTMLElement {
     spacer.className = "spacer";
     header.appendChild(spacer);
 
-    // View mode: enable/disable the whole setup.
-    if (!this._edit && setup) {
-      const enabled = setup.enabled !== false;
-      const sw = this._switch(enabled, (v) =>
-        this._updateSetup(setup.entry_id, { enabled: v })
-      );
-      sw.title = enabled ? this._t("disable") : this._t("enable");
-      header.appendChild(sw);
-    }
+    // Right-side controls grouped tightly together.
+    const actions = document.createElement("div");
+    actions.className = "head-actions";
 
     if (this._edit) {
       const addSetup = document.createElement("button");
@@ -698,12 +697,22 @@ class GardenIrrigationCard extends HTMLElement {
         this._addSetupOpen = !this._addSetupOpen;
         this._rebuild();
       });
-      header.appendChild(addSetup);
+      actions.appendChild(addSetup);
+    }
+
+    // View mode: enable/disable the whole setup (sits next to the edit icon).
+    if (!this._edit && setup) {
+      const enabled = setup.enabled !== false;
+      const sw = this._switch(enabled, (v) =>
+        this._updateSetup(setup.entry_id, { enabled: v })
+      );
+      sw.title = enabled ? this._t("disable") : this._t("enable");
+      actions.appendChild(sw);
     }
 
     const isEditCtx = this._edit;
     const modeBtn = document.createElement("button");
-    modeBtn.className = "icon-btn" + (isEditCtx ? " active" : "");
+    modeBtn.className = "icon-btn ghost" + (isEditCtx ? " active" : "");
     modeBtn.title = isEditCtx ? this._t("done") : this._t("edit");
     modeBtn.innerHTML = isEditCtx
       ? `<ha-icon icon="mdi:check"></ha-icon>`
@@ -718,8 +727,9 @@ class GardenIrrigationCard extends HTMLElement {
         this._rebuild();
       }
     });
-    header.appendChild(modeBtn);
+    actions.appendChild(modeBtn);
 
+    header.appendChild(actions);
     return header;
   }
 
