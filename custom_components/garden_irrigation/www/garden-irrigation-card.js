@@ -142,6 +142,8 @@ const STYLES = `
   button.active { border-color: var(--primary-color); color: var(--primary-color); font-weight: 600; }
   .icon-btn { border-radius: 10px; padding: 8px; line-height: 0; }
   .icon-btn ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); }
+  .icon-btn.active { border-color: var(--primary-color); }
+  .icon-btn.active ha-icon { color: var(--primary-color); }
   .toggle { display: inline-flex; border: 1px solid var(--divider-color); border-radius: 10px; overflow: hidden; }
   .toggle button { border: none; border-radius: 0; padding: 6px 12px; }
   .toggle button.on { background: var(--primary-color); color: var(--text-primary-color, #fff); }
@@ -491,10 +493,11 @@ class GardenIrrigationCard extends HTMLElement {
     }
 
     const modeBtn = document.createElement("button");
+    modeBtn.className = "icon-btn" + (this._edit ? " active" : "");
+    modeBtn.title = this._edit ? this._t("done") : this._t("edit");
     modeBtn.innerHTML = this._edit
-      ? `<ha-icon icon="mdi:check"></ha-icon> ${this._t("done")}`
-      : `<ha-icon icon="mdi:pencil"></ha-icon> ${this._t("edit")}`;
-    if (this._edit) modeBtn.classList.add("active");
+      ? `<ha-icon icon="mdi:check"></ha-icon>`
+      : `<ha-icon icon="mdi:pencil"></ha-icon>`;
     modeBtn.addEventListener("click", () => {
       this._edit = !this._edit;
       this._addZoneOpen = false;
