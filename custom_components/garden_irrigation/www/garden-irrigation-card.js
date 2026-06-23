@@ -632,6 +632,15 @@ class GardenIrrigationCard extends HTMLElement {
     this._rebuild();
   }
 
+  _showEditButton() {
+    // edit_button: "always" (default) | "admin" | "never"
+    const pref = this._config.edit_button || "always";
+    if (pref === "never") return false;
+    if (pref === "admin")
+      return !!(this._hass && this._hass.user && this._hass.user.is_admin);
+    return true;
+  }
+
   _buildHeader() {
     const header = document.createElement("div");
     header.className = "header";
@@ -701,23 +710,25 @@ class GardenIrrigationCard extends HTMLElement {
     }
 
     const isEditCtx = this._edit;
-    const modeBtn = document.createElement("button");
-    modeBtn.className = "icon-btn ghost" + (isEditCtx ? " active" : "");
-    modeBtn.title = isEditCtx ? this._t("done") : this._t("edit");
-    modeBtn.innerHTML = isEditCtx
-      ? `<ha-icon icon="mdi:check"></ha-icon>`
-      : `<ha-icon icon="mdi:pencil"></ha-icon>`;
-    modeBtn.addEventListener("click", () => {
-      if (isEditCtx) {
-        this._closeEdit();
-      } else {
-        this._editOpen = true;
-        this._addZoneOpen = false;
-        this._addSetupOpen = false;
-        this._rebuild();
-      }
-    });
-    actions.appendChild(modeBtn);
+    if (isEditCtx || this._showEditButton()) {
+      const modeBtn = document.createElement("button");
+      modeBtn.className = "icon-btn ghost" + (isEditCtx ? " active" : "");
+      modeBtn.title = isEditCtx ? this._t("done") : this._t("edit");
+      modeBtn.innerHTML = isEditCtx
+        ? `<ha-icon icon="mdi:check"></ha-icon>`
+        : `<ha-icon icon="mdi:pencil"></ha-icon>`;
+      modeBtn.addEventListener("click", () => {
+        if (isEditCtx) {
+          this._closeEdit();
+        } else {
+          this._editOpen = true;
+          this._addZoneOpen = false;
+          this._addSetupOpen = false;
+          this._rebuild();
+        }
+      });
+      actions.appendChild(modeBtn);
+    }
 
     // View mode: enable/disable toggle sits AFTER the edit icon.
     if (!this._edit && setup) {

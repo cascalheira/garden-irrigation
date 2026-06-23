@@ -76,7 +76,12 @@ type: custom:garden-irrigation-card
 mode: view               # "view" (default) or "edit"
 setup: Garden            # optional — pin to a setup by name or entry_id
 title: Garden watering   # optional fallback only; the setup name is shown when loaded
+edit_button: always      # "always" (default) | "admin" (only admins) | "never"
 ```
+
+`edit_button` controls who sees the pencil that opens the edit overlay — use
+`admin` to hide it from non-admin users, or `never` to lock the card to
+view-only (configure via the integration's options instead).
 
 The header shows the **setup name** (rename it inline in edit mode). `title` is
 only used as a fallback before a setup loads.
