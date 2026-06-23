@@ -5,23 +5,30 @@ Home Assistant (and HACS) show an integration's icon from the central
 **not** from this repo. Until `garden_irrigation` is added there, HACS shows a
 generic icon.
 
-This folder holds the ready-to-submit icon:
+This folder already mirrors the `home-assistant/brands` layout, so the files can
+be copied straight into a brands fork:
 
-- `icon.png` — 256×256, transparent
-- `icon@2x.png` — 512×512, transparent
-- `icon.svg` — source
+```
+custom_integrations/garden_irrigation/icon.png      (256x256, transparent)
+custom_integrations/garden_irrigation/icon@2x.png   (512x512, transparent)
+```
+
+`icon.svg` is the source.
 
 ## How to get the icon to show in HACS / Home Assistant
 
-Open a pull request against `home-assistant/brands` adding these files under
-`custom_integrations/garden_irrigation/`:
+The icon **cannot** be served from this repository — HACS and HA only read
+integration icons from `home-assistant/brands`. To make it appear:
 
-```
-custom_integrations/garden_irrigation/icon.png      (256x256)
-custom_integrations/garden_irrigation/icon@2x.png   (512x512)
+```bash
+# 1. Fork and clone home-assistant/brands, then from this repo:
+cp -r brands/custom_integrations/garden_irrigation \
+      <path-to-brands>/custom_integrations/
+
+# 2. Commit in the brands fork and open a PR against home-assistant/brands.
 ```
 
 (Optionally add `logo.png` / `logo@2x.png` for a wordmark.) Once that PR is
 merged, the icon appears automatically at
-`https://brands.home-assistant.io/garden_irrigation/icon.png` and HACS/HA will
-display it — no change needed in this repository.
+`https://brands.home-assistant.io/garden_irrigation/icon.png` and HACS/HA show
+it — no further change needed here.

@@ -212,7 +212,7 @@ const STYLES = `
   .empty { color: var(--secondary-text-color); margin-top: 12px; }
 
   /* ---- View mode (compact, read-only) ---- */
-  ha-card.view .header { border-bottom: 1px solid var(--divider-color); padding-bottom: 14px; margin-bottom: 2px; }
+  ha-card.view .header { padding-bottom: 6px; }
   .vzone { display: flex; align-items: center; gap: 14px; padding: 16px 6px; }
   .vzone + .vzone { border-top: 1px solid var(--divider-color); }
   .vzone.running { background: rgba(3,169,244,.06); border-radius: 14px; margin: 4px 0; }
@@ -230,8 +230,14 @@ const STYLES = `
   .vleft { color: var(--primary-text-color); font-weight: 650; font-size: .85rem; font-variant-numeric: tabular-nums; min-width: 46px; text-align: right; }
   .pill { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; font-weight: 600; color: var(--primary-color); background: rgba(3,169,244,.13); border-radius: 999px; padding: 3px 9px; }
   .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary-color); }
-  .seqbar.view { background: transparent; border-radius: 0; padding: 14px 6px 6px; margin: 0; color: var(--secondary-text-color); }
-  .seqbar.view b { color: var(--primary-text-color); font-variant-numeric: tabular-nums; }
+  .seqbar.view {
+    display: flex; align-items: center; gap: 10px;
+    margin: 2px 0 8px; padding: 10px 14px; border-radius: 12px;
+    font-size: .9rem; color: var(--secondary-text-color);
+    background: var(--secondary-background-color);
+  }
+  .seqbar.view ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); flex: none; }
+  .seqbar.view b { color: var(--primary-text-color); font-variant-numeric: tabular-nums; font-weight: 650; }
   .seqedit { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin-top: 10px; }
   .seqedit .lbl { color: var(--secondary-text-color); margin-right: 4px; }
   .warn { color: var(--error-color); font-size: .85rem; margin-top: 8px; }
@@ -814,11 +820,11 @@ class GardenIrrigationCard extends HTMLElement {
       : "<b>—</b>";
     const dayText = this._uniformDaysText(setup.start_times);
 
-    const txt = document.createElement("span");
-    txt.innerHTML = `${this._escape(this._t("starts"))} ${timesHtml}${
-      dayText ? " · " + this._escape(dayText) : ""
-    }`;
-    bar.appendChild(txt);
+    bar.innerHTML =
+      `<ha-icon icon="mdi:clock-outline"></ha-icon>` +
+      `<span>${this._escape(this._t("starts"))} ${timesHtml}${
+        dayText ? " · " + this._escape(dayText) : ""
+      }</span>`;
     return bar;
   }
 
@@ -1030,19 +1036,20 @@ class GardenIrrigationCard extends HTMLElement {
 
     const actions = document.createElement("div");
     actions.className = "vactions";
-    // Per-zone enable toggle (hidden when the whole setup is disabled).
+    // Run button first, then the per-zone enable toggle (toggle hidden when the
+    // whole setup is disabled).
     if (setupEnabled) {
-      const sw = this._switch(zoneEnabled, (v) =>
-        this._updateZone(setup.entry_id, zone.zone_id, { enabled: v })
-      );
-      sw.title = zoneEnabled ? this._t("disable") : this._t("enable");
-      actions.appendChild(sw);
       if (zoneEnabled) {
         const action = document.createElement("button");
         action.addEventListener("click", () => this._toggleRun(zone));
         actions.appendChild(action);
         refs.action = action;
       }
+      const sw = this._switch(zoneEnabled, (v) =>
+        this._updateZone(setup.entry_id, zone.zone_id, { enabled: v })
+      );
+      sw.title = zoneEnabled ? this._t("disable") : this._t("enable");
+      actions.appendChild(sw);
     }
     el.appendChild(actions);
 
