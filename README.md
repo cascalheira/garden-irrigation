@@ -67,10 +67,10 @@ setup: Garden            # optional — pin to a setup by name or entry_id
 
 The card has two modes (toggle with the **Edit / Done** button):
 
-- **View mode** — adjust each zone's **duration** slider, **set times**
-  (schedules in *specific* mode, or the start time in *sequential* mode), and
-  **Run now / Stop**. Structural controls are hidden.
-- **Edit mode** — everything in view mode, plus:
+- **View mode** — a compact, read-only layout: each zone shows its duration and
+  schedule times (or position in a sequence), with only **Run / Stop**. A running
+  zone shows a live **progress bar** and time remaining. No editing controls.
+- **Edit mode** — everything is editable:
   - **Add zone** / **Add setup** (only visible in edit mode)
   - **Delete** zone or setup
   - the zone's **switch** and **pre/post scripts** (shown and editable)

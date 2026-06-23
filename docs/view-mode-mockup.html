@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Garden Irrigation — compact view mode mockup</title>
+<style>
+  :root {
+    --primary-color: #03a9f4;
+    --primary-text-color: #1c1c1e;
+    --secondary-text-color: #71757b;
+    --divider-color: #ececef;
+    --card-bg: #fff;
+    --secondary-bg: #f0f1f3;
+    --error-color: #d8483b;
+    --radius: 18px;
+  }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f6f7f9; margin: 0; padding: 36px 20px; color: var(--primary-text-color);
+  }
+  .wrap { max-width: 580px; margin: 0 auto; }
+  .hint { color: var(--secondary-text-color); font-size: .85rem; line-height: 1.5; margin: 0 6px 16px; }
+
+  .card {
+    background: var(--card-bg); border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 6px 20px rgba(0,0,0,.04);
+    padding: 8px 10px; margin-bottom: 30px;
+  }
+
+  /* Header */
+  .header { display: flex; align-items: center; gap: 11px; padding: 12px 12px 14px;
+            border-bottom: 1px solid var(--divider-color); }
+  .header .drop { color: var(--primary-color); font-size: 23px; line-height: 0; }
+  .header h1 { font-size: 1.3rem; font-weight: 700; margin: 0; flex: 1; letter-spacing: -.01em; }
+
+  .btn {
+    font: inherit; cursor: pointer; border-radius: 11px; border: 1px solid var(--divider-color);
+    background: var(--card-bg); color: var(--primary-text-color);
+    padding: 8px 14px; display: inline-flex; align-items: center; gap: 6px; font-size: .9rem;
+    font-weight: 500; transition: background .15s, border-color .15s, transform .05s;
+  }
+  .btn:hover { background: var(--secondary-bg); }
+  .btn:active { transform: translateY(1px); }
+  .btn.ghost { border-color: transparent; color: var(--secondary-text-color); }
+  .btn.stop { color: var(--error-color); border-color: rgba(216,72,59,.4); }
+  .btn.run { color: var(--primary-color); border-color: rgba(3,169,244,.4); }
+
+  /* Zone rows — dividers only BETWEEN zones */
+  .zone {
+    display: flex; align-items: center; gap: 14px; padding: 16px 12px;
+  }
+  .zone + .zone { border-top: 1px solid var(--divider-color); }
+  .zone .info { flex: 1; min-width: 0; }
+  .zone .name { font-weight: 650; font-size: 1.05rem; display: flex; align-items: center; gap: 9px; }
+  .zone .meta {
+    color: var(--secondary-text-color); font-size: .84rem; margin-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .zone .meta .dur { color: var(--primary-text-color); font-weight: 600; }
+  .zone .action { flex: none; }
+
+  /* Running state */
+  .zone.running {
+    background: rgba(3,169,244,.06);
+    border-radius: 14px; margin: 4px 0; border-top: none;
+  }
+  .zone.running + .zone { border-top: none; }
+
+  .progress { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+  .bar { flex: 1; height: 8px; border-radius: 999px; background: rgba(3,169,244,.16); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 38%; background: var(--primary-color);
+             border-radius: 999px; transition: width .5s linear; }
+  .left { color: var(--primary-text-color); font-weight: 650; font-size: .85rem;
+          font-variant-numeric: tabular-nums; min-width: 46px; text-align: right; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; font-weight: 600;
+    color: var(--primary-color); background: rgba(3,169,244,.13); border-radius: 999px; padding: 3px 9px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary-color); }
+
+  /* Sequential start-time bar (sits below the title divider, no line of its own) */
+  .seqbar {
+    display: flex; align-items: center; gap: 8px; margin: 0 12px; padding: 14px 0 6px;
+    color: var(--secondary-text-color); font-size: .86rem;
+  }
+  .seqbar b { color: var(--primary-text-color); font-variant-numeric: tabular-nums; }
+  .seqbar .spacer { flex: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="hint">Mockup — compact <b>view mode</b>: read-only (no sliders / time editing), only Run &amp; Stop. The running zone shows a wide live progress bar. Open in a browser; it animates.</p>
+
+  <!-- SPECIFIC-MODE SETUP -->
+  <div class="card">
+    <div class="header">
+      <span class="drop">💧</span>
+      <h1>Garden watering</h1>
+      <button class="btn ghost">✏️ Edit</button>
+    </div>
+
+    <div class="zone">
+      <div class="info">
+        <div class="name">Front lawn</div>
+        <div class="meta"><span class="dur">15 min</span> · 06:00 · 19:30</div>
+      </div>
+      <div class="action"><button class="btn run">▷ Run</button></div>
+    </div>
+
+    <div class="zone running">
+      <div class="info">
+        <div class="name">Vegetable beds <span class="pill"><span class="dot"></span> scheduled</span></div>
+        <div class="meta"><span class="dur">8 min</span> · 07:00</div>
+        <div class="progress">
+          <div class="bar"><i id="fill"></i></div>
+          <span class="left" id="left">5:02</span>
+        </div>
+      </div>
+      <div class="action"><button class="btn stop">□ Stop</button></div>
+    </div>
+
+    <div class="zone">
+      <div class="info">
+        <div class="name">Rose border</div>
+        <div class="meta"><span class="dur">5 min</span> · <span style="color:var(--secondary-text-color)">no schedules</span></div>
+      </div>
+      <div class="action"><button class="btn run">▷ Run</button></div>
+    </div>
+  </div>
+
+  <!-- SEQUENTIAL-MODE SETUP -->
+  <p class="hint">Same compact view for a <b>sequential</b> setup — the read-only start time shows once at the top; zones have no per-zone times.</p>
+  <div class="card">
+    <div class="header">
+      <span class="drop">💧</span>
+      <h1>Trees</h1>
+      <button class="btn ghost">✏️ Edit</button>
+    </div>
+    <div class="seqbar">Starts <b>05:30</b> · Mon, Wed, Fri <span class="spacer"></span><button class="btn run">▷ Run sequence</button></div>
+
+    <div class="zone">
+      <div class="info">
+        <div class="name">Olive trees</div>
+        <div class="meta"><span class="dur">20 min</span> · runs 1st</div>
+      </div>
+      <div class="action"><button class="btn run">▷ Run</button></div>
+    </div>
+    <div class="zone">
+      <div class="info">
+        <div class="name">Fruit trees</div>
+        <div class="meta"><span class="dur">12 min</span> · runs 2nd</div>
+      </div>
+      <div class="action"><button class="btn run">▷ Run</button></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let remaining = 302, total = 480;
+  const fill = document.getElementById("fill"), left = document.getElementById("left");
+  function paint() {
+    const pct = Math.round(((total - remaining) / total) * 100);
+    fill.style.width = pct + "%";
+    left.textContent = Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0");
+  }
+  paint();
+  setInterval(() => { remaining = remaining > 0 ? remaining - 1 : total; paint(); }, 1000);
+</script>
+</body>
+</html>

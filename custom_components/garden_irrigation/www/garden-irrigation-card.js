@@ -86,6 +86,25 @@ const STYLES = `
   .form input[type="text"], .form input[type="number"] { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); }
   .form .form-actions { display: flex; gap: 10px; justify-content: flex-end; }
   .empty { color: var(--secondary-text-color); margin-top: 12px; }
+
+  /* ---- View mode (compact, read-only) ---- */
+  ha-card.view .header { border-bottom: 1px solid var(--divider-color); padding-bottom: 14px; margin-bottom: 2px; }
+  .vzone { display: flex; align-items: center; gap: 14px; padding: 16px 6px; }
+  .vzone + .vzone { border-top: 1px solid var(--divider-color); }
+  .vzone.running { background: rgba(3,169,244,.06); border-radius: 14px; margin: 4px 0; }
+  .vzone.running + .vzone { border-top: none; }
+  .vzone .info { flex: 1; min-width: 0; }
+  .vname { font-weight: 650; font-size: 1.05rem; display: flex; align-items: center; gap: 9px; color: var(--primary-text-color); }
+  .vmeta { color: var(--secondary-text-color); font-size: .84rem; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .vmeta .dur { color: var(--primary-text-color); font-weight: 600; }
+  .vprogress { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+  .vbar { flex: 1; height: 8px; border-radius: 999px; background: rgba(3,169,244,.16); overflow: hidden; }
+  .vbar > i { display: block; height: 100%; width: 0%; background: var(--primary-color); border-radius: 999px; transition: width .5s linear; }
+  .vleft { color: var(--primary-text-color); font-weight: 650; font-size: .85rem; font-variant-numeric: tabular-nums; min-width: 46px; text-align: right; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; font-weight: 600; color: var(--primary-color); background: rgba(3,169,244,.13); border-radius: 999px; padding: 3px 9px; }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary-color); }
+  .seqbar.view { background: transparent; border-radius: 0; padding: 14px 6px 6px; margin: 0; color: var(--secondary-text-color); }
+  .seqbar.view b { color: var(--primary-text-color); font-variant-numeric: tabular-nums; }
 `;
 
 class GardenIrrigationCard extends HTMLElement {
@@ -213,6 +232,7 @@ class GardenIrrigationCard extends HTMLElement {
     const style = document.createElement("style");
     style.textContent = STYLES;
     const card = document.createElement("ha-card");
+    card.classList.add(this._edit ? "edit" : "view");
 
     card.appendChild(this._buildHeader());
 
@@ -361,6 +381,45 @@ class GardenIrrigationCard extends HTMLElement {
   }
 
   _buildSeqBar(setup) {
+    return this._edit ? this._buildSeqBarEdit(setup) : this._buildSeqBarView(setup);
+  }
+
+  _buildSeqBarView(setup) {
+    const bar = document.createElement("div");
+    bar.className = "seqbar view";
+
+    const txt = document.createElement("span");
+    txt.innerHTML = `Starts <b>${this._escape(setup.start_time)}</b> · ${this._escape(
+      this._formatDays(setup.days)
+    )}`;
+    bar.appendChild(txt);
+
+    const spacer = document.createElement("div");
+    spacer.style.flex = "1";
+    bar.appendChild(spacer);
+
+    const anyRunning = setup.zones.some((z) => {
+      const st = this._stateFor(z);
+      return st && st.state === "on";
+    });
+    const run = document.createElement("button");
+    if (anyRunning) {
+      run.className = "stop";
+      run.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> Stop`;
+      run.addEventListener("click", () =>
+        this._ws({ type: "garden_irrigation/setup/stop", entry_id: setup.entry_id })
+      );
+    } else {
+      run.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> Run sequence`;
+      run.addEventListener("click", () =>
+        this._ws({ type: "garden_irrigation/setup/run", entry_id: setup.entry_id })
+      );
+    }
+    bar.appendChild(run);
+    return bar;
+  }
+
+  _buildSeqBarEdit(setup) {
     const bar = document.createElement("div");
     bar.className = "seq-bar";
 
@@ -419,7 +478,89 @@ class GardenIrrigationCard extends HTMLElement {
   }
 
   _buildZone(setup, zone) {
-    const refs = {};
+    return this._edit
+      ? this._buildZoneEdit(setup, zone)
+      : this._buildZoneView(setup, zone);
+  }
+
+  _zoneMetaHtml(setup, zone) {
+    const dur = `<span class="dur">${zone.duration} min</span>`;
+    if (setup.mode === "sequential") {
+      const idx = setup.zones.findIndex((z) => z.zone_id === zone.zone_id);
+      return `${dur} · runs ${this._ordinal(idx + 1)}`;
+    }
+    const times = (zone.schedules || []).map((s) => this._escape(s.time));
+    if (times.length === 0)
+      return `${dur} · <span style="opacity:.85">no schedules</span>`;
+    const shown = times.slice(0, 3).join(" · ");
+    const extra = times.length > 3 ? ` +${times.length - 3}` : "";
+    return `${dur} · ${shown}${extra}`;
+  }
+
+  _ordinal(n) {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  }
+
+  _buildZoneView(setup, zone) {
+    const refs = { kind: "view" };
+    const el = document.createElement("div");
+    el.className = "vzone";
+    refs.el = el;
+
+    const info = document.createElement("div");
+    info.className = "info";
+
+    const name = document.createElement("div");
+    name.className = "vname";
+    const nameText = document.createElement("span");
+    nameText.textContent = zone.name;
+    const pill = document.createElement("span");
+    pill.className = "pill";
+    pill.hidden = true;
+    pill.innerHTML = `<span class="dot"></span><span class="pill-text"></span>`;
+    name.append(nameText, pill);
+    info.appendChild(name);
+    refs.pill = pill;
+    refs.pillText = pill.querySelector(".pill-text");
+
+    const meta = document.createElement("div");
+    meta.className = "vmeta";
+    meta.innerHTML = this._zoneMetaHtml(setup, zone);
+    info.appendChild(meta);
+
+    const progress = document.createElement("div");
+    progress.className = "vprogress";
+    progress.hidden = true;
+    const bar = document.createElement("div");
+    bar.className = "vbar";
+    const fill = document.createElement("i");
+    bar.appendChild(fill);
+    const left = document.createElement("span");
+    left.className = "vleft";
+    progress.append(bar, left);
+    info.appendChild(progress);
+    refs.progress = progress;
+    refs.fill = fill;
+    refs.left = left;
+    refs.total = Math.max(1, zone.duration * 60);
+
+    el.appendChild(info);
+
+    const actionWrap = document.createElement("div");
+    const action = document.createElement("button");
+    action.addEventListener("click", () => this._toggleRun(zone));
+    actionWrap.appendChild(action);
+    el.appendChild(actionWrap);
+    refs.action = action;
+
+    this._refs[zone.zone_id] = refs;
+    return el;
+  }
+
+  _buildZoneEdit(setup, zone) {
+    const refs = { kind: "edit" };
     const el = document.createElement("div");
     el.className = "zone";
     refs.el = el;
@@ -699,31 +840,41 @@ class GardenIrrigationCard extends HTMLElement {
       const refs = this._refs[zone.zone_id];
       if (!refs) continue;
       const st = this._stateFor(zone);
-      const running = st && st.state === "on";
+      const running = !!(st && st.state === "on");
       const attrs = (st && st.attributes) || {};
+      const source = attrs.run_source === "scheduled" ? "scheduled" : "manual";
 
-      refs.el.classList.toggle("running", !!running);
+      refs.el.classList.toggle("running", running);
+      refs.endsAt = running ? attrs.ends_at || null : null;
+
+      if (refs.kind === "view") {
+        refs.pill.hidden = !running;
+        if (running) refs.pillText.textContent = source;
+        refs.progress.hidden = !running;
+        refs.action.className = running ? "stop" : "";
+        refs.action.innerHTML = running
+          ? `<ha-icon icon="mdi:stop"></ha-icon> Stop`
+          : `<ha-icon icon="mdi:play"></ha-icon> Run`;
+        continue;
+      }
+
+      // edit mode
       if (running) {
         refs.badge.hidden = false;
-        const source = attrs.run_source === "scheduled" ? "scheduled" : "manual";
         refs.badgeText.textContent = `Watering · ${source}`;
       } else {
         refs.badge.hidden = true;
       }
-
       if (this.shadowRoot.activeElement !== refs.slider) {
         refs.slider.value = String(zone.duration);
         refs.durVal.textContent = `${zone.duration} min`;
       }
-
       if (running) {
         refs.action.className = "stop";
         refs.action.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> Stop`;
-        refs.action.endsAt = attrs.ends_at || null;
       } else {
         refs.action.className = "";
         refs.action.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> Run now`;
-        refs.action.endsAt = null;
         refs.status.innerHTML = `${zone.duration} min manual run`;
       }
     }
@@ -734,14 +885,21 @@ class GardenIrrigationCard extends HTMLElement {
     if (!this._refs) return;
     for (const zoneId of Object.keys(this._refs)) {
       const refs = this._refs[zoneId];
-      if (!refs.action || !refs.action.endsAt) continue;
+      if (!refs.endsAt) continue;
       const left = Math.max(
         0,
-        Math.round((new Date(refs.action.endsAt).getTime() - Date.now()) / 1000)
+        Math.round((new Date(refs.endsAt).getTime() - Date.now()) / 1000)
       );
       const m = Math.floor(left / 60);
       const s = String(left % 60).padStart(2, "0");
-      refs.status.innerHTML = `Time left: <b>${m}:${s}</b>`;
+      if (refs.kind === "view") {
+        const total = refs.total || 1;
+        const pct = Math.min(100, Math.max(0, ((total - left) / total) * 100));
+        refs.fill.style.width = `${pct}%`;
+        refs.left.textContent = `${m}:${s}`;
+      } else {
+        refs.status.innerHTML = `Time left: <b>${m}:${s}</b>`;
+      }
     }
   }
 
