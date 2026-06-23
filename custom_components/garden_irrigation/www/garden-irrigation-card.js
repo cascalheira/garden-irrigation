@@ -227,7 +227,7 @@ const STYLES = `
   .overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding: 28px 16px; overflow: auto; }
   .overlay-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(1px); }
   .overlay-panel {
-    position: relative; z-index: 1; margin: auto;
+    position: relative; z-index: 1; margin: 0 auto;
     width: min(880px, 96vw); max-height: calc(100vh - 56px); overflow: auto;
     background: var(--ha-card-background, var(--card-background-color, #fff));
     color: var(--primary-text-color);
