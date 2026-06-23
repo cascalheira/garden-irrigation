@@ -30,6 +30,7 @@ from .const import (
     CONF_DAYS,
     CONF_DURATION,
     CONF_ENABLED,
+    CONF_FORECAST_ENABLED,
     CONF_FORECAST_ENTITY,
     CONF_FORECAST_HOURS,
     CONF_FORECAST_THRESHOLD,
@@ -37,6 +38,7 @@ from .const import (
     CONF_NAME,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
+    CONF_RAIN_ENABLED,
     CONF_RAIN_ENTITY,
     CONF_RAIN_HOURS,
     CONF_RAIN_THRESHOLD,
@@ -458,6 +460,8 @@ class IrrigationController:
 
     async def _recent_rain(self) -> bool:
         """True if the configured rain entity shows rain within the look-back window."""
+        if not self.entry.options.get(CONF_RAIN_ENABLED, True):
+            return False
         entity_id = self.entry.options.get(CONF_RAIN_ENTITY)
         if not entity_id:
             return False
@@ -512,6 +516,8 @@ class IrrigationController:
 
     async def _rain_forecast(self) -> bool:
         """True if the forecast shows a high chance of rain within the look-ahead window."""
+        if not self.entry.options.get(CONF_FORECAST_ENABLED, True):
+            return False
         entity_id = self.entry.options.get(CONF_FORECAST_ENTITY)
         if not entity_id:
             return False

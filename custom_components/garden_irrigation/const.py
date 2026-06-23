@@ -26,9 +26,11 @@ CONF_POST_SCRIPT = "post_script"
 CONF_ENABLED = "enabled"  # soft enable/disable for a setup or a zone
 
 # Rain skip (per setup; applies to scheduled runs only)
+CONF_RAIN_ENABLED = "rain_enabled"  # toggle the "has rained" check
 CONF_RAIN_ENTITY = "rain_entity"  # sensor / weather / binary_sensor
 CONF_RAIN_HOURS = "rain_hours"
 CONF_RAIN_THRESHOLD = "rain_threshold"  # mm
+CONF_FORECAST_ENABLED = "forecast_enabled"  # toggle the "will rain" check
 CONF_FORECAST_ENTITY = "forecast_entity"  # weather entity
 CONF_FORECAST_HOURS = "forecast_hours"
 CONF_FORECAST_THRESHOLD = "forecast_threshold"  # %

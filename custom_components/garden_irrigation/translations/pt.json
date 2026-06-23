@@ -47,9 +47,11 @@
           "mode": "Modo de agendamento",
           "pre_script": "Script de pré-rega (sequencial)",
           "post_script": "Script de pós-rega (sequencial)",
+          "rain_enabled": "Ignorar se choveu",
           "rain_entity": "Entidade de chuva recente (sensor / meteorologia / binário)",
           "rain_hours": "Chuva recente — período anterior (horas)",
           "rain_threshold": "Chuva recente — limite de quantidade (mm)",
+          "forecast_enabled": "Ignorar se houver previsão de chuva",
           "forecast_entity": "Entidade meteorológica de previsão",
           "forecast_hours": "Previsão — período seguinte (horas)",
           "forecast_threshold": "Previsão — limite de probabilidade de chuva (%)"

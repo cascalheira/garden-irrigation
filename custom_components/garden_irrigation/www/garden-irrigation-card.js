@@ -71,6 +71,8 @@ const STR = {
     rainInfoForecast: (p, h) => `<b>≥${p}%</b> rain is forecast within <b>${h} h</b>`,
     enable: "Enable",
     disable: "Disable",
+    skipIfRained: "Skip if it rained",
+    skipIfForecast: "Skip if rain forecast",
   },
   pt: {
     title: "Rega do jardim",
@@ -124,6 +126,8 @@ const STR = {
     rainInfoForecast: (p, h) => `há previsão de chuva <b>≥${p}%</b> nas próximas <b>${h} h</b>`,
     enable: "Ativar",
     disable: "Desativar",
+    skipIfRained: "Ignorar se choveu",
+    skipIfForecast: "Ignorar se houver previsão de chuva",
   },
 };
 
@@ -250,6 +254,9 @@ const STYLES = `
   .raininfo b { color: var(--primary-text-color); font-weight: 650; font-variant-numeric: tabular-nums; }
   .rainbox { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin-top: 12px; }
   .rainbox-title { font-weight: 600; font-size: .9rem; margin-bottom: 6px; }
+  .rain-sec { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .rain-sec-label { font-weight: 600; font-size: .88rem; }
+  .field-row.dim { opacity: .5; }
   input.num { font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); width: 100%; box-sizing: border-box; }
   .seq-footer { display: flex; padding: 16px 6px 4px; margin-top: 6px; border-top: 1px solid var(--divider-color); }
   .seq-footer button { flex: 1; justify-content: center; }
@@ -594,10 +601,12 @@ class GardenIrrigationCard extends HTMLElement {
     if (skip && skip.would_skip) return this._buildSkipBanner(skip);
     // Edit mode has the full rain-skip config box instead.
     if (this._edit) return null;
-    if (!setup.rain_entity && !setup.forecast_entity) return null;
+    const recentActive = setup.rain_entity && setup.rain_enabled !== false;
+    const forecastActive = setup.forecast_entity && setup.forecast_enabled !== false;
+    if (!recentActive && !forecastActive) return null;
 
     const parts = [];
-    if (setup.rain_entity) {
+    if (recentActive) {
       const dom = setup.rain_entity.split(".")[0];
       parts.push(
         dom === "binary_sensor"
@@ -605,7 +614,7 @@ class GardenIrrigationCard extends HTMLElement {
           : this._t("rainInfoRecent", setup.rain_threshold, setup.rain_hours)
       );
     }
-    if (setup.forecast_entity) {
+    if (forecastActive) {
       parts.push(
         this._t("rainInfoForecast", setup.forecast_threshold, setup.forecast_hours)
       );
@@ -662,7 +671,14 @@ class GardenIrrigationCard extends HTMLElement {
         this._updateSetup(setup.entry_id, { rain_threshold: v })
       )
     );
-    box.appendChild(r1);
+    box.appendChild(
+      this._rainSection(
+        this._t("skipIfRained"),
+        setup.rain_enabled !== false,
+        (v) => this._updateSetup(setup.entry_id, { rain_enabled: v }),
+        r1
+      )
+    );
 
     const r2 = document.createElement("div");
     r2.className = "field-row";
@@ -684,8 +700,31 @@ class GardenIrrigationCard extends HTMLElement {
         this._updateSetup(setup.entry_id, { forecast_threshold: v })
       )
     );
-    box.appendChild(r2);
+    box.appendChild(
+      this._rainSection(
+        this._t("skipIfForecast"),
+        setup.forecast_enabled !== false,
+        (v) => this._updateSetup(setup.entry_id, { forecast_enabled: v }),
+        r2
+      )
+    );
     return box;
+  }
+
+  _rainSection(label, enabled, onToggle, fieldRow) {
+    const wrap = document.createElement("div");
+    const head = document.createElement("div");
+    head.className = "rain-sec";
+    const sw = this._switch(enabled, onToggle);
+    sw.title = enabled ? this._t("disable") : this._t("enable");
+    const l = document.createElement("span");
+    l.className = "rain-sec-label";
+    l.textContent = label;
+    head.append(sw, l);
+    wrap.appendChild(head);
+    if (!enabled) fieldRow.classList.add("dim");
+    wrap.appendChild(fieldRow);
+    return wrap;
   }
 
   _labeledField(label, el) {

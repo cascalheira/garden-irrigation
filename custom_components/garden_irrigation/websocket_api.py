@@ -21,6 +21,7 @@ from .const import (
     CONF_DAYS,
     CONF_DURATION,
     CONF_ENABLED,
+    CONF_FORECAST_ENABLED,
     CONF_FORECAST_ENTITY,
     CONF_FORECAST_HOURS,
     CONF_FORECAST_THRESHOLD,
@@ -28,6 +29,7 @@ from .const import (
     CONF_NAME,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
+    CONF_RAIN_ENABLED,
     CONF_RAIN_ENTITY,
     CONF_RAIN_HOURS,
     CONF_RAIN_THRESHOLD,
@@ -134,9 +136,11 @@ def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         "start_times": _start_times(options),
         "pre_script": options.get(CONF_PRE_SCRIPT),
         "post_script": options.get(CONF_POST_SCRIPT),
+        "rain_enabled": options.get(CONF_RAIN_ENABLED, True),
         "rain_entity": options.get(CONF_RAIN_ENTITY),
         "rain_hours": options.get(CONF_RAIN_HOURS, DEFAULT_RAIN_HOURS),
         "rain_threshold": options.get(CONF_RAIN_THRESHOLD, DEFAULT_RAIN_THRESHOLD),
+        "forecast_enabled": options.get(CONF_FORECAST_ENABLED, True),
         "forecast_entity": options.get(CONF_FORECAST_ENTITY),
         "forecast_hours": options.get(CONF_FORECAST_HOURS, DEFAULT_FORECAST_HOURS),
         "forecast_threshold": options.get(
@@ -219,9 +223,11 @@ async def ws_add_setup(
         vol.Optional("days"): [vol.In(WEEKDAYS)],
         vol.Optional("pre_script"): vol.Any(str, None),
         vol.Optional("post_script"): vol.Any(str, None),
+        vol.Optional("rain_enabled"): bool,
         vol.Optional("rain_entity"): vol.Any(str, None),
         vol.Optional("rain_hours"): vol.Coerce(float),
         vol.Optional("rain_threshold"): vol.Coerce(float),
+        vol.Optional("forecast_enabled"): bool,
         vol.Optional("forecast_entity"): vol.Any(str, None),
         vol.Optional("forecast_hours"): vol.Coerce(float),
         vol.Optional("forecast_threshold"): vol.Coerce(float),
@@ -240,8 +246,9 @@ def ws_update_setup(
         return
 
     options = dict(entry.options)
-    if "enabled" in msg:
-        options[CONF_ENABLED] = bool(msg["enabled"])
+    for flag in ("enabled", "rain_enabled", "forecast_enabled"):
+        if flag in msg:
+            options[flag] = bool(msg[flag])
     if "mode" in msg:
         options[CONF_MODE] = msg["mode"]
     if "start_time" in msg:

@@ -25,6 +25,7 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_DAYS,
     CONF_DURATION,
+    CONF_FORECAST_ENABLED,
     CONF_FORECAST_ENTITY,
     CONF_FORECAST_HOURS,
     CONF_FORECAST_THRESHOLD,
@@ -32,6 +33,7 @@ from .const import (
     CONF_NAME,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
+    CONF_RAIN_ENABLED,
     CONF_RAIN_ENTITY,
     CONF_RAIN_HOURS,
     CONF_RAIN_THRESHOLD,
@@ -286,6 +288,8 @@ class OptionsFlowHandler(OptionsFlow):
             ):
                 if user_input.get(key) is not None:
                     self._opts[key] = user_input[key]
+            for key in (CONF_RAIN_ENABLED, CONF_FORECAST_ENABLED):
+                self._opts[key] = bool(user_input.get(key, True))
             if user_input[CONF_MODE] != MODE_SEQUENTIAL:
                 return await self.async_step_finish()
             return await self.async_step_menu()
@@ -297,6 +301,10 @@ class OptionsFlowHandler(OptionsFlow):
                 ): MODE_SELECTOR,
                 vol.Optional(CONF_PRE_SCRIPT): SCRIPT_SELECTOR,
                 vol.Optional(CONF_POST_SCRIPT): SCRIPT_SELECTOR,
+                vol.Optional(
+                    CONF_RAIN_ENABLED,
+                    default=self._opts.get(CONF_RAIN_ENABLED, True),
+                ): selector.BooleanSelector(),
                 vol.Optional(CONF_RAIN_ENTITY): RAIN_ENTITY_SELECTOR,
                 vol.Optional(
                     CONF_RAIN_HOURS,
@@ -306,6 +314,10 @@ class OptionsFlowHandler(OptionsFlow):
                     CONF_RAIN_THRESHOLD,
                     default=self._opts.get(CONF_RAIN_THRESHOLD, DEFAULT_RAIN_THRESHOLD),
                 ): MM_SELECTOR,
+                vol.Optional(
+                    CONF_FORECAST_ENABLED,
+                    default=self._opts.get(CONF_FORECAST_ENABLED, True),
+                ): selector.BooleanSelector(),
                 vol.Optional(CONF_FORECAST_ENTITY): WEATHER_SELECTOR,
                 vol.Optional(
                     CONF_FORECAST_HOURS,
@@ -391,9 +403,11 @@ class OptionsFlowHandler(OptionsFlow):
                     new_options[key] = self._opts[key]
         # Rain skip applies to both modes.
         for key in (
+            CONF_RAIN_ENABLED,
             CONF_RAIN_ENTITY,
             CONF_RAIN_HOURS,
             CONF_RAIN_THRESHOLD,
+            CONF_FORECAST_ENABLED,
             CONF_FORECAST_ENTITY,
             CONF_FORECAST_HOURS,
             CONF_FORECAST_THRESHOLD,

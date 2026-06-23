@@ -47,9 +47,11 @@
           "mode": "Scheduling mode",
           "pre_script": "Pre-irrigation script (sequential)",
           "post_script": "Post-irrigation script (sequential)",
+          "rain_enabled": "Skip if it rained",
           "rain_entity": "Recent-rain entity (sensor / weather / binary)",
           "rain_hours": "Recent rain — look-back (hours)",
           "rain_threshold": "Recent rain — amount threshold (mm)",
+          "forecast_enabled": "Skip if rain forecast",
           "forecast_entity": "Forecast weather entity",
           "forecast_hours": "Forecast — look-ahead (hours)",
           "forecast_threshold": "Forecast — rain chance threshold (%)"
