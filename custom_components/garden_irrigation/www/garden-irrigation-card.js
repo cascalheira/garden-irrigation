@@ -368,6 +368,7 @@ const STYLES = `
   .rain-sec-label { font-weight: 600; font-size: .88rem; }
   .field-row.dim { opacity: .5; }
   input.num { font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); width: 100%; box-sizing: border-box; }
+  .gi-select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); width: 100%; box-sizing: border-box; }
   .seq-footer { display: flex; justify-content: center; gap: 12px; padding: 16px 6px 4px; margin-top: 6px; border-top: 1px solid var(--divider-color); }
   .title-input { font: inherit; font-size: 1.3rem; font-weight: 700; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); min-width: 0; }
 `;
@@ -1154,12 +1155,7 @@ class GardenIrrigationCard extends HTMLElement {
     const row = document.createElement("div");
     row.className = "field-row" + (enabled ? "" : " dim");
     row.appendChild(
-      this._labeledField(
-        this._t("notifyTarget"),
-        this._entityPicker(setup.notify_target, ["notify"], (v) =>
-          this._updateSetup(setup.entry_id, { notify_target: v || null })
-        ).el
-      )
+      this._labeledField(this._t("notifyTarget"), this._notifySelect(setup))
     );
     box.appendChild(row);
 
@@ -1190,6 +1186,60 @@ class GardenIrrigationCard extends HTMLElement {
     testRow.appendChild(testBtn);
     box.appendChild(testRow);
     return box;
+  }
+
+  _notifyTargets() {
+    const opts = [];
+    // Notify entities (modern; used via notify.send_message).
+    for (const eid of Object.keys((this._hass && this._hass.states) || {})) {
+      if (eid.startsWith("notify.")) {
+        const st = this._hass.states[eid];
+        opts.push({ value: eid, label: (st.attributes && st.attributes.friendly_name) || eid });
+      }
+    }
+    // Legacy notify services (e.g. mobile_app_*), used via notify.<service>.
+    const svc = (this._hass && this._hass.services && this._hass.services.notify) || {};
+    for (const name of Object.keys(svc)) {
+      if (name === "send_message") continue;
+      const value = `notify.${name}`;
+      if (!opts.some((o) => o.value === value)) opts.push({ value, label: value });
+    }
+    return opts.sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  _notifySelect(setup) {
+    const sel = document.createElement("select");
+    sel.className = "gi-select";
+    const cur = setup.notify_target || "";
+
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "—";
+    sel.appendChild(none);
+
+    let found = false;
+    for (const t of this._notifyTargets()) {
+      const o = document.createElement("option");
+      o.value = t.value;
+      o.textContent = t.label;
+      if (t.value === cur) {
+        o.selected = true;
+        found = true;
+      }
+      sel.appendChild(o);
+    }
+    if (cur && !found) {
+      const o = document.createElement("option");
+      o.value = cur;
+      o.textContent = cur;
+      o.selected = true;
+      sel.appendChild(o);
+    }
+
+    sel.addEventListener("change", () =>
+      this._updateSetup(setup.entry_id, { notify_target: sel.value || null })
+    );
+    return sel;
   }
 
   _rainSection(label, enabled, onToggle, fieldRow) {
