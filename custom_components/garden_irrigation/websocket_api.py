@@ -69,6 +69,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         ws_run_setup,
         ws_stop_setup,
         ws_skip_status,
+        ws_history,
         ws_add_zone,
         ws_update_zone,
         ws_delete_zone,
@@ -387,6 +388,25 @@ async def ws_skip_status(
             "last_skip": controller.last_skip,
         },
     )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/history",
+        vol.Required("entry_id"): str,
+    }
+)
+@callback
+def ws_history(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return the setup's history events (newest first)."""
+    entry = _entry(hass, msg["entry_id"])
+    controller = getattr(entry, "runtime_data", None) if entry else None
+    events = list(controller.history) if controller is not None else []
+    connection.send_result(msg["id"], {"events": list(reversed(events))})
 
 
 @websocket_api.require_admin

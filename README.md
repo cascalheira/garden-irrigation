@@ -36,6 +36,12 @@ and services — no YAML required.
   and after it closes (open main supply, send a notification, etc.). Per-zone in
   any setup, plus **setup-level** pre/post scripts for *sequential* setups that
   run once around the whole sequence.
+- **Reliable valve close** — after each zone the switch-off is **verified and
+  retried** (network glitches can drop a command); if it can't be confirmed off
+  it's logged as an error so a valve is never silently left open.
+- **History** — a per-setup activity log (runs, finishes, manual stops, rain
+  skips, and failed-to-close warnings), persisted across restarts and shown in a
+  formatted, colour-coded panel opened from the card (next to **Run sequence**).
 - A **Time remaining** sensor per zone, with `next_run` and run metadata exposed as
   attributes.
 - A **dashboard card** with view/edit modes that manages setups, zones and

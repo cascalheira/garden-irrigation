@@ -79,6 +79,19 @@ const STR = {
     tabRain: "Rain",
     specificHint: "Each zone has its own times — set them on the Zones tab.",
     scriptsHint: "Sequence scripts apply to sequential setups. Per-zone scripts are on the Zones tab.",
+    history: "History",
+    close: "Close",
+    noHistory: "No activity yet.",
+    histSequence: "Sequence started",
+    histStarted: "started",
+    histFinished: "finished",
+    histStopped: "stopped",
+    histSkipped: "Watering skipped",
+    histOffFailed: "may still be open — switch didn't confirm off",
+    histSkipRecent: "recent rain",
+    histSkipForecast: "rain forecast",
+    today: "Today",
+    yesterday: "Yesterday",
   },
   pt: {
     title: "Rega do jardim",
@@ -140,6 +153,19 @@ const STR = {
     tabRain: "Chuva",
     specificHint: "Cada zona tem os seus próprios horários — defina-os no separador Zonas.",
     scriptsHint: "Os scripts da sequência aplicam-se a conjuntos sequenciais. Os scripts por zona estão no separador Zonas.",
+    history: "Histórico",
+    close: "Fechar",
+    noHistory: "Ainda sem atividade.",
+    histSequence: "Sequência iniciada",
+    histStarted: "iniciou",
+    histFinished: "concluída",
+    histStopped: "parada",
+    histSkipped: "Rega ignorada",
+    histOffFailed: "pode continuar aberta — o interruptor não confirmou o fecho",
+    histSkipRecent: "choveu recentemente",
+    histSkipForecast: "previsão de chuva",
+    today: "Hoje",
+    yesterday: "Ontem",
   },
 };
 
@@ -248,6 +274,30 @@ const STYLES = `
   .tab-body { padding-top: 14px; }
   .zone-add-row { display: flex; margin-bottom: 12px; }
 
+  /* ---- History ---- */
+  .overlay-panel.hist { width: min(560px, 96vw); padding: 6px 16px 18px; }
+  .hist-head { position: sticky; top: 0; z-index: 2; background: inherit;
+    display: flex; align-items: center; gap: 10px; padding: 12px 4px 12px;
+    font-weight: 700; font-size: 1.2rem; color: var(--primary-text-color); }
+  .hist-head > ha-icon { color: var(--primary-color); --mdc-icon-size: 24px; }
+  .hist-list { display: flex; flex-direction: column; }
+  .hist-day { font-size: .76rem; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--secondary-text-color); margin: 16px 4px 2px; }
+  .hist-row { display: flex; align-items: flex-start; gap: 12px; padding: 11px 4px;
+    border-top: 1px solid var(--divider-color); }
+  .hist-day + .hist-row { border-top: none; }
+  .hist-row > ha-icon { --mdc-icon-size: 22px; flex: none; margin-top: 1px; }
+  .hist-main { flex: 1; min-width: 0; }
+  .hist-title { font-weight: 600; color: var(--primary-text-color); }
+  .hist-sub { color: var(--secondary-text-color); font-size: .85rem; margin-top: 1px; }
+  .hist-time { color: var(--secondary-text-color); font-size: .82rem;
+    font-variant-numeric: tabular-nums; flex: none; padding-top: 1px; }
+  .h-blue > ha-icon { color: var(--primary-color); }
+  .h-green > ha-icon { color: var(--success-color, #43a047); }
+  .h-amber > ha-icon { color: var(--warning-color, #d68f00); }
+  .h-red > ha-icon { color: var(--error-color); }
+  .h-grey > ha-icon { color: var(--secondary-text-color); }
+
   /* ---- View mode (compact, read-only) ---- */
   ha-card.view .header { padding-bottom: 8px; }
   .vzone { display: flex; align-items: center; gap: 14px; padding: 16px 6px; }
@@ -304,7 +354,7 @@ const STYLES = `
   .rain-sec-label { font-weight: 600; font-size: .88rem; }
   .field-row.dim { opacity: .5; }
   input.num { font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); width: 100%; box-sizing: border-box; }
-  .seq-footer { display: flex; justify-content: center; padding: 16px 6px 4px; margin-top: 6px; border-top: 1px solid var(--divider-color); }
+  .seq-footer { display: flex; justify-content: center; gap: 12px; padding: 16px 6px 4px; margin-top: 6px; border-top: 1px solid var(--divider-color); }
   .title-input { font: inherit; font-size: 1.3rem; font-weight: 700; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); min-width: 0; }
 `;
 
@@ -317,6 +367,8 @@ class GardenIrrigationCard extends HTMLElement {
     this._edit = false; // transient: true while building the edit overlay
     this._editOpen = false; // whether the edit overlay is shown
     this._tab = "zones"; // active overlay tab: zones | schedule | rain
+    this._historyOpen = false;
+    this._history = [];
     this._selected = null;
     this._addZoneOpen = false;
     this._addSetupOpen = false;
@@ -416,6 +468,8 @@ class GardenIrrigationCard extends HTMLElement {
     return JSON.stringify({
       editOpen: this._editOpen,
       tab: this._tab,
+      historyOpen: this._historyOpen,
+      history: this._historyOpen ? this._history : null,
       selected: this._selected,
       addZone: this._addZoneOpen,
       addSetup: this._addSetupOpen,
@@ -468,6 +522,8 @@ class GardenIrrigationCard extends HTMLElement {
       this._edit = false;
     }
 
+    if (this._historyOpen) root.appendChild(this._buildHistoryOverlay());
+
     this.shadowRoot.replaceChildren(root);
   }
 
@@ -509,13 +565,176 @@ class GardenIrrigationCard extends HTMLElement {
       card.appendChild(empty);
     }
     for (const zone of setup.zones) card.appendChild(this._buildZone(setup, zone));
+    if (!this._edit && setup.zones.length)
+      card.appendChild(this._buildViewFooter(setup));
+  }
+
+  _buildViewFooter(setup) {
+    const footer = document.createElement("div");
+    footer.className = "seq-footer";
     if (
-      !this._edit &&
       setup.mode === "sequential" &&
       setup.zones.length &&
       setup.enabled !== false
     )
-      card.appendChild(this._buildSeqFooter(setup));
+      footer.appendChild(this._seqRunButton(setup));
+
+    const hist = document.createElement("button");
+    hist.innerHTML = `<ha-icon icon="mdi:history"></ha-icon> ${this._t("history")}`;
+    hist.addEventListener("click", () => this._openHistory());
+    footer.appendChild(hist);
+    return footer;
+  }
+
+  async _openHistory() {
+    this._historyOpen = true;
+    this._rebuild();
+    try {
+      const res = await this._ws({
+        type: "garden_irrigation/history",
+        entry_id: this._currentSetup().entry_id,
+      });
+      this._history = res.events || [];
+    } catch (e) {
+      this._history = [];
+    }
+    this._rebuild();
+  }
+
+  _closeHistory() {
+    this._historyOpen = false;
+    this._rebuild();
+  }
+
+  _buildHistoryOverlay() {
+    const overlay = document.createElement("div");
+    overlay.className = "overlay";
+    const bg = document.createElement("div");
+    bg.className = "overlay-bg";
+    bg.addEventListener("click", () => this._closeHistory());
+
+    const panel = document.createElement("div");
+    panel.className = "overlay-panel hist";
+
+    const head = document.createElement("div");
+    head.className = "hist-head";
+    head.innerHTML = `<ha-icon icon="mdi:history"></ha-icon><span>${this._escape(
+      this._t("history")
+    )}</span>`;
+    const spacer = document.createElement("div");
+    spacer.style.flex = "1";
+    const close = document.createElement("button");
+    close.className = "icon-btn ghost";
+    close.title = this._t("close");
+    close.innerHTML = `<ha-icon icon="mdi:close"></ha-icon>`;
+    close.addEventListener("click", () => this._closeHistory());
+    head.append(spacer, close);
+    panel.appendChild(head);
+
+    const events = this._history || [];
+    if (events.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = this._t("noHistory");
+      panel.appendChild(empty);
+    } else {
+      const list = document.createElement("div");
+      list.className = "hist-list";
+      let lastDay = null;
+      for (const ev of events) {
+        const d = new Date(ev.ts);
+        const dayKey = d.toDateString();
+        if (dayKey !== lastDay) {
+          lastDay = dayKey;
+          const dh = document.createElement("div");
+          dh.className = "hist-day";
+          dh.textContent = this._formatDay(d);
+          list.appendChild(dh);
+        }
+        list.appendChild(this._buildHistRow(ev, d));
+      }
+      panel.appendChild(list);
+    }
+
+    overlay.append(bg, panel);
+    return overlay;
+  }
+
+  _buildHistRow(ev, d) {
+    const row = document.createElement("div");
+    const style = this._histStyle(ev.type);
+    row.className = "hist-row " + style.cls;
+    const t = this._histText(ev);
+    row.innerHTML =
+      `<ha-icon icon="${style.icon}"></ha-icon>` +
+      `<div class="hist-main"><div class="hist-title">${this._escape(t.title)}</div>` +
+      (t.sub ? `<div class="hist-sub">${this._escape(t.sub)}</div>` : "") +
+      `</div>` +
+      `<div class="hist-time">${this._escape(this._formatClock(d))}</div>`;
+    return row;
+  }
+
+  _histStyle(type) {
+    return (
+      {
+        sequence: { icon: "mdi:playlist-play", cls: "h-blue" },
+        start: { icon: "mdi:play-circle", cls: "h-blue" },
+        finish: { icon: "mdi:check-circle", cls: "h-green" },
+        stop: { icon: "mdi:stop-circle", cls: "h-grey" },
+        skip: { icon: "mdi:weather-rainy", cls: "h-amber" },
+        error: { icon: "mdi:alert-circle", cls: "h-red" },
+      }[type] || { icon: "mdi:information-outline", cls: "h-grey" }
+    );
+  }
+
+  _histText(ev) {
+    switch (ev.type) {
+      case "sequence":
+        return { title: this._t("histSequence"), sub: "" };
+      case "start":
+        return {
+          title: ev.zone,
+          sub: `${this._t("histStarted")} · ${ev.minutes} min · ${this._t(
+            ev.source === "scheduled" ? "scheduled" : "manual"
+          )}`,
+        };
+      case "finish":
+        return { title: ev.zone, sub: this._t("histFinished") };
+      case "stop":
+        return { title: ev.zone, sub: this._t("histStopped") };
+      case "skip":
+        return {
+          title: this._t("histSkipped"),
+          sub:
+            ev.detail === "rain_forecast"
+              ? this._t("histSkipForecast")
+              : this._t("histSkipRecent"),
+        };
+      case "error":
+        return { title: ev.zone, sub: this._t("histOffFailed") };
+      default:
+        return { title: ev.type, sub: "" };
+    }
+  }
+
+  _formatDay(d) {
+    const now = new Date();
+    const y = new Date(now);
+    y.setDate(now.getDate() - 1);
+    if (d.toDateString() === now.toDateString()) return this._t("today");
+    if (d.toDateString() === y.toDateString()) return this._t("yesterday");
+    return d.toLocaleDateString(this._lang() === "pt" ? "pt-PT" : "en", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  _formatClock(d) {
+    return d.toLocaleTimeString(this._lang() === "pt" ? "pt-PT" : "en", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   _buildEditOverlay() {
@@ -961,13 +1180,6 @@ class GardenIrrigationCard extends HTMLElement {
       )
     );
     return wrap;
-  }
-
-  _buildSeqFooter(setup) {
-    const footer = document.createElement("div");
-    footer.className = "seq-footer";
-    footer.appendChild(this._seqRunButton(setup));
-    return footer;
   }
 
   _seqRunButton(setup) {

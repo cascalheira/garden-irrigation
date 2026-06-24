@@ -24,6 +24,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -73,6 +74,15 @@ from .util import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Reliable turn-off: verify the switch reported off, retry if not.
+OFF_MAX_ATTEMPTS = 5
+OFF_SETTLE = 1.0  # seconds to let the state settle before checking
+OFF_RETRY_DELAY = 3.0  # seconds between retry attempts
+
+# History log
+HISTORY_VERSION = 1
+MAX_HISTORY = 200
+
 
 @dataclass
 class Zone:
@@ -121,6 +131,10 @@ class IrrigationController:
         self._chain_task: asyncio.Task | None = None
         self._unsub_time: list[Callable[[], None]] = []
         self._last_skip: dict[str, Any] | None = None
+        self._history: list[dict[str, Any]] = []
+        self._store: Store = Store(
+            hass, HISTORY_VERSION, f"{DOMAIN}_history_{entry.entry_id}"
+        )
 
     # ----- configuration helpers -------------------------------------------------
 
@@ -185,6 +199,7 @@ class IrrigationController:
 
     async def async_setup(self) -> None:
         """Register schedule listeners and refresh derived state."""
+        self._history = await self._store.async_load() or []
         self._register_schedules()
         self._update_overlap_issue()
 
@@ -204,6 +219,8 @@ class IrrigationController:
                 await task
         self._running.clear()
         self._chain_task = None
+        # Persist any pending history before the controller is replaced (reload).
+        await self._store.async_save(self._history)
 
     @callback
     def _register_schedules(self) -> None:
@@ -373,6 +390,7 @@ class IrrigationController:
         runs once after it (even if the sequence is stopped early).
         """
         _LOGGER.debug("Starting sequential chain for %s", self.entry.title)
+        self._log("sequence")
         try:
             if self.pre_script:
                 await self._run_script(self.pre_script)
@@ -406,22 +424,65 @@ class IrrigationController:
             source=source,
         )
         self._notify()
+        self._log("start", zone=zone.name, source=source, minutes=zone.duration)
+        stopped = False
         try:
             if zone.pre_script:
                 await self._run_script(zone.pre_script)
             await self._set_switch(zone.switch_entity, True)
             await asyncio.sleep(seconds)
+        except asyncio.CancelledError:
+            stopped = True
+            raise
         finally:
-            await asyncio.shield(self._cleanup(zone))
+            await asyncio.shield(self._cleanup(zone, stopped))
 
-    async def _cleanup(self, zone: Zone) -> None:
+    async def _cleanup(self, zone: Zone, stopped: bool) -> None:
         try:
-            await self._set_switch(zone.switch_entity, False)
+            closed = await self._async_ensure_off(zone.switch_entity)
             if zone.post_script:
                 await self._run_script(zone.post_script)
         finally:
             self._running.pop(zone.id, None)
             self._notify()
+        if not closed:
+            self._log("error", zone=zone.name, detail="off_failed", level="error")
+        else:
+            self._log("stop" if stopped else "finish", zone=zone.name)
+
+    async def _async_ensure_off(self, entity_id: str) -> bool:
+        """Turn the switch off and verify it; retry if it's still reported on.
+
+        Network glitches can drop the command, so we confirm the state and try
+        again a few times rather than assume a single call worked.
+        """
+        for attempt in range(1, OFF_MAX_ATTEMPTS + 1):
+            try:
+                await self._set_switch(entity_id, False)
+            except Exception as err:  # noqa: BLE001 — keep retrying on any failure
+                _LOGGER.warning("turn_off failed for %s: %s", entity_id, err)
+            await asyncio.sleep(OFF_SETTLE)
+            state = self.hass.states.get(entity_id)
+            if state is None or state.state != "on":
+                if attempt > 1:
+                    _LOGGER.info(
+                        "%s confirmed off after %d attempt(s)", entity_id, attempt
+                    )
+                return True
+            _LOGGER.warning(
+                "%s still on after turn-off attempt %d/%d",
+                entity_id,
+                attempt,
+                OFF_MAX_ATTEMPTS,
+            )
+            if attempt < OFF_MAX_ATTEMPTS:
+                await asyncio.sleep(OFF_RETRY_DELAY)
+        _LOGGER.error(
+            "%s may still be OPEN — could not confirm off after %d attempts",
+            entity_id,
+            OFF_MAX_ATTEMPTS,
+        )
+        return False
 
     async def _set_switch(self, entity_id: str, turn_on: bool) -> None:
         await self.hass.services.async_call(
@@ -443,6 +504,40 @@ class IrrigationController:
     @callback
     def _notify(self) -> None:
         async_dispatcher_send(self.hass, f"{SIGNAL_UPDATE}_{self.entry.entry_id}")
+
+    # ----- history ---------------------------------------------------------------
+
+    @property
+    def history(self) -> list[dict[str, Any]]:
+        """Return the stored history events (oldest first)."""
+        return self._history
+
+    @callback
+    def _log(
+        self,
+        event_type: str,
+        zone: str | None = None,
+        detail: str | None = None,
+        source: str | None = None,
+        minutes: int | None = None,
+        level: str = "info",
+    ) -> None:
+        """Append an event to the user-facing history and persist it (debounced)."""
+        self._history.append(
+            {
+                "ts": dt_util.utcnow().isoformat(),
+                "type": event_type,
+                "zone": zone,
+                "detail": detail,
+                "source": source,
+                "minutes": minutes,
+                "level": level,
+            }
+        )
+        if len(self._history) > MAX_HISTORY:
+            self._history = self._history[-MAX_HISTORY:]
+        self._store.async_delay_save(lambda: self._history, 5)
+        self._notify()
 
     # ----- rain skip -------------------------------------------------------------
 
@@ -557,6 +652,7 @@ class IrrigationController:
     @callback
     def _record_skip(self, reason: str) -> None:
         self._last_skip = {"reason": reason, "at": dt_util.utcnow().isoformat()}
+        self._log("skip", detail=reason, level="warning")
         _LOGGER.info(
             "Skipping scheduled irrigation for %s (%s)", self.entry.title, reason
         )
