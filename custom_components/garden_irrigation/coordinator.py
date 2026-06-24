@@ -304,13 +304,16 @@ class IrrigationController:
     async def async_start_zone(
         self, zone_id: str, duration: int | None = None, source: str = "manual"
     ) -> None:
-        """Start a single zone now (independent of any chain)."""
+        """Start a single zone now (independent of any chain).
+
+        A manual start always runs, even if the zone is disabled — disabling only
+        excludes a zone from *scheduled* runs (the scheduled paths check that
+        before calling here).
+        """
         zone = self.get_zone(zone_id)
         if zone is None:
             _LOGGER.warning("Cannot start unknown zone %s", zone_id)
             return
-        if not self.enabled or not zone.enabled:
-            return  # paused
         if zone_id in self._running:
             return  # already watering
 
@@ -479,7 +482,21 @@ class IrrigationController:
             message = f"⚠️ {self.entry.title}: zone “{zone_name}” failed to start."
         else:
             message = f"⚠️ {self.entry.title}: {zone_name} — {detail}"
+        await self._send_notification(target, message)
 
+    async def async_test_notification(self) -> bool:
+        """Send a test notification to the configured target. Returns False if none."""
+        target = self.entry.options.get(CONF_NOTIFY_TARGET)
+        if not target:
+            return False
+        await self._send_notification(
+            target,
+            f"✅ {self.entry.title}: test notification — Garden Irrigation is set up "
+            "correctly.",
+        )
+        return True
+
+    async def _send_notification(self, target: str, message: str) -> None:
         data = {"message": message, "title": "Garden irrigation"}
         try:
             if self.hass.states.get(target) is not None:
@@ -497,7 +514,7 @@ class IrrigationController:
                     "notify", service, data, blocking=False
                 )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Could not send failure notification: %s", err)
+            _LOGGER.warning("Could not send notification: %s", err)
 
     async def _async_ensure_off(self, entity_id: str) -> bool:
         """Turn the switch off and verify it; retry if it's still reported on.

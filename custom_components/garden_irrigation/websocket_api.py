@@ -72,6 +72,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         ws_stop_setup,
         ws_skip_status,
         ws_history,
+        ws_notify_test,
         ws_add_zone,
         ws_update_zone,
         ws_delete_zone,
@@ -418,6 +419,31 @@ def ws_history(
     controller = getattr(entry, "runtime_data", None) if entry else None
     events = list(controller.history) if controller is not None else []
     connection.send_result(msg["id"], {"events": list(reversed(events))})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/notify_test",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_notify_test(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Send a test notification to the setup's configured target."""
+    entry = _entry(hass, msg["entry_id"])
+    controller = getattr(entry, "runtime_data", None) if entry else None
+    if controller is None:
+        connection.send_error(msg["id"], "not_found", "Setup not ready")
+        return
+    if await controller.async_test_notification():
+        connection.send_result(msg["id"], {})
+    else:
+        connection.send_error(msg["id"], "no_target", "No notification target set")
 
 
 @websocket_api.require_admin

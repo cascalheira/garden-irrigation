@@ -92,9 +92,13 @@ const STR = {
     histSkipForecast: "rain forecast",
     today: "Today",
     yesterday: "Yesterday",
+    tabNotify: "Notifications",
     notifyTitle: "Notify on failures",
     notifyTarget: "Notification target",
     notifyHint: "Sends a push notification if a zone fails to start or a valve can't be confirmed closed.",
+    notifyTest: "Send test",
+    notifyTestSent: "Test notification sent.",
+    notifyTestFail: "Could not send — pick a notification target first.",
   },
   pt: {
     title: "Rega do jardim",
@@ -169,9 +173,13 @@ const STR = {
     histSkipForecast: "previsão de chuva",
     today: "Hoje",
     yesterday: "Ontem",
+    tabNotify: "Notificações",
     notifyTitle: "Notificar em falhas",
     notifyTarget: "Destino da notificação",
     notifyHint: "Envia uma notificação push se uma zona falhar ao iniciar ou se uma válvula não confirmar o fecho.",
+    notifyTest: "Enviar teste",
+    notifyTestSent: "Notificação de teste enviada.",
+    notifyTestFail: "Não foi possível enviar — escolha primeiro um destino.",
   },
 };
 
@@ -269,7 +277,7 @@ const STYLES = `
     padding: 6px 18px 20px;
   }
   .overlay-panel .topbar { position: sticky; top: 0; z-index: 2; background: inherit; padding-top: 12px; }
-  .tabs { display: flex; gap: 4px; margin: 10px 0 0; border-bottom: 1px solid var(--divider-color); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0 0; border-bottom: 1px solid var(--divider-color); }
   .tab {
     border: none; background: transparent; border-radius: 0; padding: 10px 16px;
     color: var(--secondary-text-color); font-weight: 600;
@@ -780,7 +788,9 @@ class GardenIrrigationCard extends HTMLElement {
     const body = document.createElement("div");
     body.className = "tab-body";
 
-    if (this._tab === "rain") {
+    if (this._tab === "notify") {
+      body.appendChild(this._buildNotify(setup));
+    } else if (this._tab === "rain") {
       body.appendChild(this._buildRainSkip(setup));
     } else if (this._tab === "scripts") {
       if (setup.mode === "sequential") {
@@ -801,7 +811,6 @@ class GardenIrrigationCard extends HTMLElement {
         hint.textContent = this._t("specificHint");
         body.appendChild(hint);
       }
-      body.appendChild(this._buildNotify(setup));
     } else {
       // zones
       const addRow = document.createElement("div");
@@ -838,6 +847,7 @@ class GardenIrrigationCard extends HTMLElement {
       ["schedule", this._t("tabSchedule")],
       ["scripts", this._t("tabScripts")],
       ["rain", this._t("tabRain")],
+      ["notify", this._t("tabNotify")],
     ].forEach(([id, label]) => {
       const b = document.createElement("button");
       b.className = "tab" + (this._tab === id ? " on" : "");
@@ -1158,6 +1168,27 @@ class GardenIrrigationCard extends HTMLElement {
     hint.style.marginTop = "8px";
     hint.textContent = this._t("notifyHint");
     box.appendChild(hint);
+
+    const testRow = document.createElement("div");
+    testRow.style.marginTop = "10px";
+    const testBtn = document.createElement("button");
+    testBtn.innerHTML = `<ha-icon icon="mdi:bell-ring-outline"></ha-icon> ${this._t(
+      "notifyTest"
+    )}`;
+    testBtn.disabled = !setup.notify_target;
+    testBtn.addEventListener("click", async () => {
+      try {
+        await this._ws({
+          type: "garden_irrigation/notify_test",
+          entry_id: setup.entry_id,
+        });
+        this._toast(this._t("notifyTestSent"));
+      } catch (e) {
+        this._toast(this._t("notifyTestFail"));
+      }
+    });
+    testRow.appendChild(testBtn);
+    box.appendChild(testRow);
     return box;
   }
 
@@ -1473,15 +1504,14 @@ class GardenIrrigationCard extends HTMLElement {
 
     const actions = document.createElement("div");
     actions.className = "vactions";
-    // Run button first, then the per-zone enable toggle (toggle hidden when the
-    // whole setup is disabled).
+    // Run button (always available — a manual run works even on a disabled zone),
+    // then the per-zone enable toggle. Both hidden only when the whole setup is off.
     if (setupEnabled) {
-      if (zoneEnabled) {
-        const action = document.createElement("button");
-        action.addEventListener("click", () => this._toggleRun(zone));
-        actions.appendChild(action);
-        refs.action = action;
-      }
+      const action = document.createElement("button");
+      action.addEventListener("click", () => this._toggleRun(zone));
+      actions.appendChild(action);
+      refs.action = action;
+
       const sw = this._switch(zoneEnabled, (v) =>
         this._updateZone(setup.entry_id, zone.zone_id, { enabled: v })
       );
