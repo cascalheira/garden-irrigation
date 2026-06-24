@@ -31,8 +31,11 @@ from .const import (
     CONF_FORECAST_THRESHOLD,
     CONF_MODE,
     CONF_NAME,
-    CONF_NOTIFY_ENABLED,
+    CONF_NOTIFY_OFF_FAILED,
+    CONF_NOTIFY_SKIP,
+    CONF_NOTIFY_START_FAILED,
     CONF_NOTIFY_TARGET,
+    CONF_NOTIFY_TARGETS,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
     CONF_RAIN_ENABLED,
@@ -245,6 +248,12 @@ class OptionsFlowHandler(OptionsFlow):
     ) -> ConfigFlowResult:
         self._opts = dict(self.config_entry.options)
         self._starts = _starts_from_options(self._opts)
+        # Migrate a legacy single notify target to the list form.
+        if not self._opts.get(CONF_NOTIFY_TARGETS) and self._opts.get(
+            CONF_NOTIFY_TARGET
+        ):
+            self._opts[CONF_NOTIFY_TARGETS] = [self._opts[CONF_NOTIFY_TARGET]]
+        self._opts.pop(CONF_NOTIFY_TARGET, None)
         return await self.async_step_menu()
 
     async def async_step_menu(
@@ -292,13 +301,12 @@ class OptionsFlowHandler(OptionsFlow):
                     self._opts[key] = user_input[key]
             for key in (CONF_RAIN_ENABLED, CONF_FORECAST_ENABLED):
                 self._opts[key] = bool(user_input.get(key, True))
-            self._opts[CONF_NOTIFY_ENABLED] = bool(
-                user_input.get(CONF_NOTIFY_ENABLED, False)
-            )
-            if user_input.get(CONF_NOTIFY_TARGET):
-                self._opts[CONF_NOTIFY_TARGET] = user_input[CONF_NOTIFY_TARGET]
-            else:
-                self._opts.pop(CONF_NOTIFY_TARGET, None)
+            for key in (
+                CONF_NOTIFY_OFF_FAILED,
+                CONF_NOTIFY_START_FAILED,
+                CONF_NOTIFY_SKIP,
+            ):
+                self._opts[key] = bool(user_input.get(key, False))
             if user_input[CONF_MODE] != MODE_SEQUENTIAL:
                 return await self.async_step_finish()
             return await self.async_step_menu()
@@ -339,12 +347,17 @@ class OptionsFlowHandler(OptionsFlow):
                     ),
                 ): PERCENT_SELECTOR,
                 vol.Optional(
-                    CONF_NOTIFY_ENABLED,
-                    default=self._opts.get(CONF_NOTIFY_ENABLED, False),
+                    CONF_NOTIFY_OFF_FAILED,
+                    default=self._opts.get(CONF_NOTIFY_OFF_FAILED, True),
                 ): selector.BooleanSelector(),
-                vol.Optional(CONF_NOTIFY_TARGET): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="notify")
-                ),
+                vol.Optional(
+                    CONF_NOTIFY_START_FAILED,
+                    default=self._opts.get(CONF_NOTIFY_START_FAILED, True),
+                ): selector.BooleanSelector(),
+                vol.Optional(
+                    CONF_NOTIFY_SKIP,
+                    default=self._opts.get(CONF_NOTIFY_SKIP, False),
+                ): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(
@@ -427,8 +440,10 @@ class OptionsFlowHandler(OptionsFlow):
             CONF_FORECAST_ENTITY,
             CONF_FORECAST_HOURS,
             CONF_FORECAST_THRESHOLD,
-            CONF_NOTIFY_ENABLED,
-            CONF_NOTIFY_TARGET,
+            CONF_NOTIFY_TARGETS,
+            CONF_NOTIFY_OFF_FAILED,
+            CONF_NOTIFY_START_FAILED,
+            CONF_NOTIFY_SKIP,
         ):
             if self._opts.get(key) not in (None, ""):
                 new_options[key] = self._opts[key]

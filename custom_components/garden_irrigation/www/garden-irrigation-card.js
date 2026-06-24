@@ -93,12 +93,16 @@ const STR = {
     today: "Today",
     yesterday: "Yesterday",
     tabNotify: "Notifications",
-    notifyTitle: "Notify on failures",
-    notifyTarget: "Notification target",
-    notifyHint: "Sends a push notification if a zone fails to start or a valve can't be confirmed closed.",
+    notifyTargets: "Targets",
+    notifyNoTargets: "No notify services or entities found.",
+    notifyEventsTitle: "Notify when:",
+    notifyOffFailed: "Valve fails to close",
+    notifyStartFailed: "Zone fails to start",
+    notifySkip: "Watering skipped (rain)",
+    critical: "Critical",
     notifyTest: "Send test",
     notifyTestSent: "Test notification sent.",
-    notifyTestFail: "Could not send — pick a notification target first.",
+    notifyTestFail: "Could not send — pick a target first.",
   },
   pt: {
     title: "Rega do jardim",
@@ -174,9 +178,13 @@ const STR = {
     today: "Hoje",
     yesterday: "Ontem",
     tabNotify: "Notificações",
-    notifyTitle: "Notificar em falhas",
-    notifyTarget: "Destino da notificação",
-    notifyHint: "Envia uma notificação push se uma zona falhar ao iniciar ou se uma válvula não confirmar o fecho.",
+    notifyTargets: "Destinos",
+    notifyNoTargets: "Nenhum serviço ou entidade de notificação encontrado.",
+    notifyEventsTitle: "Notificar quando:",
+    notifyOffFailed: "Válvula não fecha",
+    notifyStartFailed: "Zona falha ao iniciar",
+    notifySkip: "Rega ignorada (chuva)",
+    critical: "Crítico",
     notifyTest: "Enviar teste",
     notifyTestSent: "Notificação de teste enviada.",
     notifyTestFail: "Não foi possível enviar — escolha primeiro um destino.",
@@ -368,7 +376,10 @@ const STYLES = `
   .rain-sec-label { font-weight: 600; font-size: .88rem; }
   .field-row.dim { opacity: .5; }
   input.num { font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); width: 100%; box-sizing: border-box; }
-  .gi-select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); width: 100%; box-sizing: border-box; }
+  .notify-targets { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+  .notify-target-row { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 5px 2px; font-size: .92rem; }
+  .notify-target-row input { width: 18px; height: 18px; accent-color: var(--primary-color); flex: none; }
+  .crit-badge { margin-left: 8px; font-size: .68rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--error-color); background: rgba(216,72,59,.13); border-radius: 999px; padding: 2px 8px; }
   .seq-footer { display: flex; justify-content: center; gap: 12px; padding: 16px 6px 4px; margin-top: 6px; border-top: 1px solid var(--divider-color); }
   .title-input { font: inherit; font-size: 1.3rem; font-weight: 700; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--divider-color); background: var(--card-background-color,#fff); color: var(--primary-text-color); min-width: 0; }
 `;
@@ -1138,40 +1149,70 @@ class GardenIrrigationCard extends HTMLElement {
   _buildNotify(setup) {
     const box = document.createElement("div");
     box.className = "rainbox";
-    const enabled = setup.notify_enabled === true;
+    const targets = setup.notify_targets || [];
 
-    const head = document.createElement("div");
-    head.className = "rain-sec";
-    const sw = this._switch(enabled, (v) =>
-      this._updateSetup(setup.entry_id, { notify_enabled: v })
+    // Targets (multiple).
+    const tLabel = document.createElement("div");
+    tLabel.className = "rainbox-title";
+    tLabel.textContent = this._t("notifyTargets");
+    box.appendChild(tLabel);
+
+    const list = document.createElement("div");
+    list.className = "notify-targets";
+    const available = this._notifyTargets();
+    const seen = new Set(available.map((a) => a.value));
+    const allOpts = available.slice();
+    for (const t of targets)
+      if (!seen.has(t)) allOpts.push({ value: t, label: t });
+    if (allOpts.length === 0) {
+      const none = document.createElement("div");
+      none.className = "hist-sub";
+      none.textContent = this._t("notifyNoTargets");
+      list.appendChild(none);
+    }
+    for (const opt of allOpts) {
+      const rowEl = document.createElement("label");
+      rowEl.className = "notify-target-row";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = targets.includes(opt.value);
+      cb.addEventListener("change", () => {
+        const next = new Set(setup.notify_targets || []);
+        if (cb.checked) next.add(opt.value);
+        else next.delete(opt.value);
+        this._updateSetup(setup.entry_id, { notify_targets: [...next] });
+      });
+      const span = document.createElement("span");
+      span.textContent = opt.label;
+      rowEl.append(cb, span);
+      list.appendChild(rowEl);
+    }
+    box.appendChild(list);
+
+    // Which events to notify about.
+    const eLabel = document.createElement("div");
+    eLabel.className = "rainbox-title";
+    eLabel.style.marginTop = "14px";
+    eLabel.textContent = this._t("notifyEventsTitle");
+    box.appendChild(eLabel);
+
+    box.appendChild(
+      this._notifyToggleRow(setup, "notify_off_failed", this._t("notifyOffFailed"), true)
     );
-    sw.title = enabled ? this._t("disable") : this._t("enable");
-    const l = document.createElement("span");
-    l.className = "rain-sec-label";
-    l.textContent = this._t("notifyTitle");
-    head.append(sw, l);
-    box.appendChild(head);
-
-    const row = document.createElement("div");
-    row.className = "field-row" + (enabled ? "" : " dim");
-    row.appendChild(
-      this._labeledField(this._t("notifyTarget"), this._notifySelect(setup))
+    box.appendChild(
+      this._notifyToggleRow(setup, "notify_start_failed", this._t("notifyStartFailed"), false)
     );
-    box.appendChild(row);
-
-    const hint = document.createElement("div");
-    hint.className = "hist-sub";
-    hint.style.marginTop = "8px";
-    hint.textContent = this._t("notifyHint");
-    box.appendChild(hint);
+    box.appendChild(
+      this._notifyToggleRow(setup, "notify_skip", this._t("notifySkip"), false)
+    );
 
     const testRow = document.createElement("div");
-    testRow.style.marginTop = "10px";
+    testRow.style.marginTop = "14px";
     const testBtn = document.createElement("button");
     testBtn.innerHTML = `<ha-icon icon="mdi:bell-ring-outline"></ha-icon> ${this._t(
       "notifyTest"
     )}`;
-    testBtn.disabled = !setup.notify_target;
+    testBtn.disabled = targets.length === 0;
     testBtn.addEventListener("click", async () => {
       try {
         await this._ws({
@@ -1186,6 +1227,25 @@ class GardenIrrigationCard extends HTMLElement {
     testRow.appendChild(testBtn);
     box.appendChild(testRow);
     return box;
+  }
+
+  _notifyToggleRow(setup, key, label, critical) {
+    const row = document.createElement("div");
+    row.className = "rain-sec";
+    const sw = this._switch(setup[key] === true, (v) =>
+      this._updateSetup(setup.entry_id, { [key]: v })
+    );
+    const l = document.createElement("span");
+    l.className = "rain-sec-label";
+    l.textContent = label;
+    row.append(sw, l);
+    if (critical) {
+      const badge = document.createElement("span");
+      badge.className = "crit-badge";
+      badge.textContent = this._t("critical");
+      row.appendChild(badge);
+    }
+    return row;
   }
 
   _notifyTargets() {
@@ -1205,41 +1265,6 @@ class GardenIrrigationCard extends HTMLElement {
       if (!opts.some((o) => o.value === value)) opts.push({ value, label: value });
     }
     return opts.sort((a, b) => a.label.localeCompare(b.label));
-  }
-
-  _notifySelect(setup) {
-    const sel = document.createElement("select");
-    sel.className = "gi-select";
-    const cur = setup.notify_target || "";
-
-    const none = document.createElement("option");
-    none.value = "";
-    none.textContent = "—";
-    sel.appendChild(none);
-
-    let found = false;
-    for (const t of this._notifyTargets()) {
-      const o = document.createElement("option");
-      o.value = t.value;
-      o.textContent = t.label;
-      if (t.value === cur) {
-        o.selected = true;
-        found = true;
-      }
-      sel.appendChild(o);
-    }
-    if (cur && !found) {
-      const o = document.createElement("option");
-      o.value = cur;
-      o.textContent = cur;
-      o.selected = true;
-      sel.appendChild(o);
-    }
-
-    sel.addEventListener("change", () =>
-      this._updateSetup(setup.entry_id, { notify_target: sel.value || null })
-    );
-    return sel;
   }
 
   _rainSection(label, enabled, onToggle, fieldRow) {

@@ -25,9 +25,13 @@ CONF_PRE_SCRIPT = "pre_script"
 CONF_POST_SCRIPT = "post_script"
 CONF_ENABLED = "enabled"  # soft enable/disable for a setup or a zone
 
-# Failure notifications (per setup)
-CONF_NOTIFY_ENABLED = "notify_enabled"
-CONF_NOTIFY_TARGET = "notify_target"  # a notify entity or service
+# Notifications (per setup)
+CONF_NOTIFY_ENABLED = "notify_enabled"  # legacy (migrated)
+CONF_NOTIFY_TARGET = "notify_target"  # legacy single target (migrated)
+CONF_NOTIFY_TARGETS = "notify_targets"  # list of notify entities/services
+CONF_NOTIFY_OFF_FAILED = "notify_off_failed"  # valve didn't close (critical)
+CONF_NOTIFY_START_FAILED = "notify_start_failed"  # zone failed to start
+CONF_NOTIFY_SKIP = "notify_skip"  # scheduled run skipped (rain)
 
 # Rain skip (per setup; applies to scheduled runs only)
 CONF_RAIN_ENABLED = "rain_enabled"  # toggle the "has rained" check

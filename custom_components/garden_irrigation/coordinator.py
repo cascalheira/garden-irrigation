@@ -37,8 +37,11 @@ from .const import (
     CONF_FORECAST_THRESHOLD,
     CONF_MODE,
     CONF_NAME,
-    CONF_NOTIFY_ENABLED,
+    CONF_NOTIFY_OFF_FAILED,
+    CONF_NOTIFY_SKIP,
+    CONF_NOTIFY_START_FAILED,
     CONF_NOTIFY_TARGET,
+    CONF_NOTIFY_TARGETS,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
     CONF_RAIN_ENABLED,
@@ -465,56 +468,86 @@ class IrrigationController:
         else:
             self._log("finish", zone=zone.name)
 
+    @property
+    def notify_targets(self) -> list[str]:
+        """Configured notify targets (entities/services); migrates a legacy single."""
+        targets = self.entry.options.get(CONF_NOTIFY_TARGETS)
+        if targets:
+            return list(targets)
+        legacy = self.entry.options.get(CONF_NOTIFY_TARGET)
+        return [legacy] if legacy else []
+
     async def _notify_failure(self, zone_name: str, detail: str) -> None:
         """Send a push notification about a failure, if enabled for this setup."""
-        if not self.entry.options.get(CONF_NOTIFY_ENABLED):
-            return
-        target = self.entry.options.get(CONF_NOTIFY_TARGET)
-        if not target:
+        targets = self.notify_targets
+        if not targets:
             return
 
         if detail == "off_failed":
+            if not self.entry.options.get(CONF_NOTIFY_OFF_FAILED, True):
+                return
             message = (
                 f"⚠️ {self.entry.title}: zone “{zone_name}” may still be OPEN — "
                 "the valve did not confirm it turned off."
             )
+            critical = True
         elif detail == "start_failed":
+            if not self.entry.options.get(CONF_NOTIFY_START_FAILED, True):
+                return
             message = f"⚠️ {self.entry.title}: zone “{zone_name}” failed to start."
+            critical = False
         else:
             message = f"⚠️ {self.entry.title}: {zone_name} — {detail}"
-        await self._send_notification(target, message)
+            critical = False
+        await self._send_notification(targets, message, critical=critical)
 
     async def async_test_notification(self) -> bool:
-        """Send a test notification to the configured target. Returns False if none."""
-        target = self.entry.options.get(CONF_NOTIFY_TARGET)
-        if not target:
+        """Send a test notification to the configured targets. False if none set."""
+        targets = self.notify_targets
+        if not targets:
             return False
         await self._send_notification(
-            target,
+            targets,
             f"✅ {self.entry.title}: test notification — Garden Irrigation is set up "
             "correctly.",
         )
         return True
 
-    async def _send_notification(self, target: str, message: str) -> None:
-        data = {"message": message, "title": "Garden irrigation"}
-        try:
-            if self.hass.states.get(target) is not None:
-                # Modern notify entity.
-                await self.hass.services.async_call(
-                    "notify",
-                    "send_message",
-                    {"entity_id": target, **data},
-                    blocking=False,
-                )
-            else:
-                # Legacy notify service, e.g. "notify.mobile_app_x" or "mobile_app_x".
-                service = target.split(".", 1)[1] if "." in target else target
-                await self.hass.services.async_call(
-                    "notify", service, data, blocking=False
-                )
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Could not send notification: %s", err)
+    async def _send_notification(
+        self, targets: list[str], message: str, critical: bool = False
+    ) -> None:
+        title = "Garden irrigation"
+        # Critical/high-priority payload (iOS critical alert + Android high prio).
+        data = (
+            {
+                "push": {"sound": {"name": "default", "critical": 1, "volume": 1.0}},
+                "ttl": 0,
+                "priority": "high",
+            }
+            if critical
+            else None
+        )
+        for target in targets:
+            try:
+                if self.hass.states.get(target) is not None:
+                    # Modern notify entity (send_message does not take `data`).
+                    await self.hass.services.async_call(
+                        "notify",
+                        "send_message",
+                        {"entity_id": target, "message": message, "title": title},
+                        blocking=False,
+                    )
+                else:
+                    # Legacy notify service, e.g. "notify.mobile_app_x".
+                    service = target.split(".", 1)[1] if "." in target else target
+                    payload = {"message": message, "title": title}
+                    if data:
+                        payload["data"] = data
+                    await self.hass.services.async_call(
+                        "notify", service, payload, blocking=False
+                    )
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("Could not notify %s: %s", target, err)
 
     async def _async_ensure_off(self, entity_id: str) -> bool:
         """Turn the switch off and verify it; retry if it's still reported on.
@@ -722,6 +755,14 @@ class IrrigationController:
         _LOGGER.info(
             "Skipping scheduled irrigation for %s (%s)", self.entry.title, reason
         )
+        if self.notify_targets and self.entry.options.get(CONF_NOTIFY_SKIP, False):
+            label = "rain forecast" if reason == SKIP_FORECAST else "recent rain"
+            self.hass.async_create_task(
+                self._send_notification(
+                    self.notify_targets,
+                    f"🌧️ {self.entry.title}: scheduled watering skipped ({label}).",
+                )
+            )
         self.hass.bus.async_fire(
             EVENT_SKIPPED,
             {

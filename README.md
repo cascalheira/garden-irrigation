@@ -42,10 +42,11 @@ and services — no YAML required.
 - **History** — a per-setup activity log (runs, finishes, manual stops, rain
   skips, and failed-to-close warnings), persisted across restarts and shown in a
   formatted, colour-coded panel opened from the card (next to **Run sequence**).
-- **Failure notifications** (optional, per setup) — pick a notify target and
-  toggle it on to get a **push notification** when a zone fails to start or a
-  valve can't be confirmed closed. Configured in the card's edit overlay
-  (Schedule tab) or the setup options.
+- **Notifications** (optional, per setup) — pick **one or more** notify targets
+  (entities *or* `mobile_app_*` services) and choose **which events** to be
+  notified about: valve fails to close (**critical** alert), zone fails to start,
+  or watering skipped by rain. A **Send test** button verifies delivery.
+  Configured in the card's edit overlay (**Notifications** tab) or setup options.
 - A **Time remaining** sensor per zone, with `next_run` and run metadata exposed as
   attributes.
 - A **dashboard card** with view/edit modes that manages setups, zones and
