@@ -356,8 +356,8 @@ const STYLES = `
   /* [hidden] must win over the display rules above */
   .pill[hidden], .vprogress[hidden] { display: none; }
   .skipwarn {
-    display: flex; align-items: center; gap: 9px; margin-top: 12px;
-    padding: 10px 14px; border-radius: 12px; font-size: .9rem; font-weight: 500;
+    display: flex; align-items: center; gap: 10px; margin: 6px 0 10px;
+    padding: 11px 14px; border-radius: 12px; font-size: .86rem; font-weight: 500;
     color: var(--warning-color, #d68f00);
     background: rgba(214, 143, 0, .12);
   }
