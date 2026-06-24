@@ -54,11 +54,14 @@
           "forecast_enabled": "Ignorar se houver previsão de chuva",
           "forecast_entity": "Entidade meteorológica de previsão",
           "forecast_hours": "Previsão — período seguinte (horas)",
-          "forecast_threshold": "Previsão — limite de probabilidade de chuva (%)"
+          "forecast_threshold": "Previsão — limite de probabilidade de chuva (%)",
+          "notify_enabled": "Notificar em falhas",
+          "notify_target": "Destino da notificação (entidade notify)"
         },
         "data_description": {
           "rain_entity": "Ignora uma execução agendada se isto indicar chuva no período anterior. Uma entidade meteorológica usa a sua precipitação atual; um sensor binário conta qualquer 'on'.",
-          "forecast_entity": "Ignora uma execução agendada se esta entidade meteorológica previr chuva acima do limite de probabilidade no período seguinte."
+          "forecast_entity": "Ignora uma execução agendada se esta entidade meteorológica previr chuva acima do limite de probabilidade no período seguinte.",
+          "notify_target": "Envia uma notificação push se uma zona falhar ao iniciar ou se uma válvula não confirmar o fecho."
         }
       },
       "add_start": {

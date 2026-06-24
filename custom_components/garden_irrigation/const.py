@@ -25,6 +25,10 @@ CONF_PRE_SCRIPT = "pre_script"
 CONF_POST_SCRIPT = "post_script"
 CONF_ENABLED = "enabled"  # soft enable/disable for a setup or a zone
 
+# Failure notifications (per setup)
+CONF_NOTIFY_ENABLED = "notify_enabled"
+CONF_NOTIFY_TARGET = "notify_target"  # a notify entity or service
+
 # Rain skip (per setup; applies to scheduled runs only)
 CONF_RAIN_ENABLED = "rain_enabled"  # toggle the "has rained" check
 CONF_RAIN_ENTITY = "rain_entity"  # sensor / weather / binary_sensor

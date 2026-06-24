@@ -42,6 +42,10 @@ and services — no YAML required.
 - **History** — a per-setup activity log (runs, finishes, manual stops, rain
   skips, and failed-to-close warnings), persisted across restarts and shown in a
   formatted, colour-coded panel opened from the card (next to **Run sequence**).
+- **Failure notifications** (optional, per setup) — pick a notify target and
+  toggle it on to get a **push notification** when a zone fails to start or a
+  valve can't be confirmed closed. Configured in the card's edit overlay
+  (Schedule tab) or the setup options.
 - A **Time remaining** sensor per zone, with `next_run` and run metadata exposed as
   attributes.
 - A **dashboard card** with view/edit modes that manages setups, zones and

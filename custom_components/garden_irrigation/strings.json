@@ -54,11 +54,14 @@
           "forecast_enabled": "Skip if rain forecast",
           "forecast_entity": "Forecast weather entity",
           "forecast_hours": "Forecast — look-ahead (hours)",
-          "forecast_threshold": "Forecast — rain chance threshold (%)"
+          "forecast_threshold": "Forecast — rain chance threshold (%)",
+          "notify_enabled": "Notify on failures",
+          "notify_target": "Notification target (notify entity)"
         },
         "data_description": {
           "rain_entity": "Skip a scheduled run if this shows rain in the look-back window. A weather entity uses its current precipitation; a binary sensor counts any 'on'.",
-          "forecast_entity": "Skip a scheduled run if this weather entity forecasts rain above the chance threshold within the look-ahead window."
+          "forecast_entity": "Skip a scheduled run if this weather entity forecasts rain above the chance threshold within the look-ahead window.",
+          "notify_target": "Sends a push notification if a zone fails to start or a valve can't be confirmed closed."
         }
       },
       "add_start": {

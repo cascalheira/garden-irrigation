@@ -37,6 +37,8 @@ from .const import (
     CONF_FORECAST_THRESHOLD,
     CONF_MODE,
     CONF_NAME,
+    CONF_NOTIFY_ENABLED,
+    CONF_NOTIFY_TARGET,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
     CONF_RAIN_ENABLED,
@@ -426,6 +428,7 @@ class IrrigationController:
         self._notify()
         self._log("start", zone=zone.name, source=source, minutes=zone.duration)
         stopped = False
+        failed = False
         try:
             if zone.pre_script:
                 await self._run_script(zone.pre_script)
@@ -434,10 +437,13 @@ class IrrigationController:
         except asyncio.CancelledError:
             stopped = True
             raise
+        except Exception as err:  # noqa: BLE001 — keep the run safe; log + notify
+            failed = True
+            _LOGGER.error("Zone %s failed to run: %s", zone.name, err)
         finally:
-            await asyncio.shield(self._cleanup(zone, stopped))
+            await asyncio.shield(self._cleanup(zone, stopped, failed))
 
-    async def _cleanup(self, zone: Zone, stopped: bool) -> None:
+    async def _cleanup(self, zone: Zone, stopped: bool, failed: bool) -> None:
         try:
             closed = await self._async_ensure_off(zone.switch_entity)
             if zone.post_script:
@@ -447,8 +453,51 @@ class IrrigationController:
             self._notify()
         if not closed:
             self._log("error", zone=zone.name, detail="off_failed", level="error")
+            await self._notify_failure(zone.name, "off_failed")
+        elif failed:
+            self._log("error", zone=zone.name, detail="start_failed", level="error")
+            await self._notify_failure(zone.name, "start_failed")
+        elif stopped:
+            self._log("stop", zone=zone.name)
         else:
-            self._log("stop" if stopped else "finish", zone=zone.name)
+            self._log("finish", zone=zone.name)
+
+    async def _notify_failure(self, zone_name: str, detail: str) -> None:
+        """Send a push notification about a failure, if enabled for this setup."""
+        if not self.entry.options.get(CONF_NOTIFY_ENABLED):
+            return
+        target = self.entry.options.get(CONF_NOTIFY_TARGET)
+        if not target:
+            return
+
+        if detail == "off_failed":
+            message = (
+                f"⚠️ {self.entry.title}: zone “{zone_name}” may still be OPEN — "
+                "the valve did not confirm it turned off."
+            )
+        elif detail == "start_failed":
+            message = f"⚠️ {self.entry.title}: zone “{zone_name}” failed to start."
+        else:
+            message = f"⚠️ {self.entry.title}: {zone_name} — {detail}"
+
+        data = {"message": message, "title": "Garden irrigation"}
+        try:
+            if self.hass.states.get(target) is not None:
+                # Modern notify entity.
+                await self.hass.services.async_call(
+                    "notify",
+                    "send_message",
+                    {"entity_id": target, **data},
+                    blocking=False,
+                )
+            else:
+                # Legacy notify service, e.g. "notify.mobile_app_x" or "mobile_app_x".
+                service = target.split(".", 1)[1] if "." in target else target
+                await self.hass.services.async_call(
+                    "notify", service, data, blocking=False
+                )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Could not send failure notification: %s", err)
 
     async def _async_ensure_off(self, entity_id: str) -> bool:
         """Turn the switch off and verify it; retry if it's still reported on.

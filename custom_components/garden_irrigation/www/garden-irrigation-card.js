@@ -92,6 +92,9 @@ const STR = {
     histSkipForecast: "rain forecast",
     today: "Today",
     yesterday: "Yesterday",
+    notifyTitle: "Notify on failures",
+    notifyTarget: "Notification target",
+    notifyHint: "Sends a push notification if a zone fails to start or a valve can't be confirmed closed.",
   },
   pt: {
     title: "Rega do jardim",
@@ -166,6 +169,9 @@ const STR = {
     histSkipForecast: "previsão de chuva",
     today: "Hoje",
     yesterday: "Ontem",
+    notifyTitle: "Notificar em falhas",
+    notifyTarget: "Destino da notificação",
+    notifyHint: "Envia uma notificação push se uma zona falhar ao iniciar ou se uma válvula não confirmar o fecho.",
   },
 };
 
@@ -795,6 +801,7 @@ class GardenIrrigationCard extends HTMLElement {
         hint.textContent = this._t("specificHint");
         body.appendChild(hint);
       }
+      body.appendChild(this._buildNotify(setup));
     } else {
       // zones
       const addRow = document.createElement("div");
@@ -1114,6 +1121,43 @@ class GardenIrrigationCard extends HTMLElement {
         r2
       )
     );
+    return box;
+  }
+
+  _buildNotify(setup) {
+    const box = document.createElement("div");
+    box.className = "rainbox";
+    const enabled = setup.notify_enabled === true;
+
+    const head = document.createElement("div");
+    head.className = "rain-sec";
+    const sw = this._switch(enabled, (v) =>
+      this._updateSetup(setup.entry_id, { notify_enabled: v })
+    );
+    sw.title = enabled ? this._t("disable") : this._t("enable");
+    const l = document.createElement("span");
+    l.className = "rain-sec-label";
+    l.textContent = this._t("notifyTitle");
+    head.append(sw, l);
+    box.appendChild(head);
+
+    const row = document.createElement("div");
+    row.className = "field-row" + (enabled ? "" : " dim");
+    row.appendChild(
+      this._labeledField(
+        this._t("notifyTarget"),
+        this._entityPicker(setup.notify_target, ["notify"], (v) =>
+          this._updateSetup(setup.entry_id, { notify_target: v || null })
+        ).el
+      )
+    );
+    box.appendChild(row);
+
+    const hint = document.createElement("div");
+    hint.className = "hist-sub";
+    hint.style.marginTop = "8px";
+    hint.textContent = this._t("notifyHint");
+    box.appendChild(hint);
     return box;
   }
 

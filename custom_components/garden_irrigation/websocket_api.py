@@ -27,6 +27,8 @@ from .const import (
     CONF_FORECAST_THRESHOLD,
     CONF_MODE,
     CONF_NAME,
+    CONF_NOTIFY_ENABLED,
+    CONF_NOTIFY_TARGET,
     CONF_POST_SCRIPT,
     CONF_PRE_SCRIPT,
     CONF_RAIN_ENABLED,
@@ -147,6 +149,8 @@ def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         "forecast_threshold": options.get(
             CONF_FORECAST_THRESHOLD, DEFAULT_FORECAST_THRESHOLD
         ),
+        "notify_enabled": options.get(CONF_NOTIFY_ENABLED, False),
+        "notify_target": options.get(CONF_NOTIFY_TARGET),
         "total_duration": sum(
             int(sub.data.get(CONF_DURATION, DEFAULT_DURATION))
             for sub in entry.subentries.values()
@@ -232,6 +236,8 @@ async def ws_add_setup(
         vol.Optional("forecast_entity"): vol.Any(str, None),
         vol.Optional("forecast_hours"): vol.Coerce(float),
         vol.Optional("forecast_threshold"): vol.Coerce(float),
+        vol.Optional("notify_enabled"): bool,
+        vol.Optional("notify_target"): vol.Any(str, None),
     }
 )
 @callback
@@ -247,9 +253,14 @@ def ws_update_setup(
         return
 
     options = dict(entry.options)
-    for flag in ("enabled", "rain_enabled", "forecast_enabled"):
+    for flag in ("enabled", "rain_enabled", "forecast_enabled", "notify_enabled"):
         if flag in msg:
             options[flag] = bool(msg[flag])
+    if "notify_target" in msg:
+        if msg["notify_target"]:
+            options[CONF_NOTIFY_TARGET] = msg["notify_target"]
+        else:
+            options.pop(CONF_NOTIFY_TARGET, None)
     if "mode" in msg:
         options[CONF_MODE] = msg["mode"]
     if "start_time" in msg:
