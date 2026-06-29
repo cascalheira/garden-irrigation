@@ -57,6 +57,8 @@ const STR = {
     removeSchedFail: (e) => `Could not remove schedule: ${e}`,
     skipRain: "Scheduled watering will be skipped — recent rain",
     skipForecast: "Scheduled watering will be skipped — rain forecast",
+    skipFreeze: "Scheduled watering will be skipped — freezing",
+    skipSoil: "Scheduled watering will be skipped — soil already moist",
     rainSkipTitle: "Rain skip (scheduled runs)",
     rainEntity: "Rain sensor / weather",
     forecastEntity: "Weather (forecast)",
@@ -90,8 +92,16 @@ const STR = {
     histOffFailed: "may still be open — switch didn't confirm off",
     histSkipRecent: "recent rain",
     histSkipForecast: "rain forecast",
+    histSkipFreeze: "freezing temperature",
+    histSkipSoil: "soil already moist",
+    histSkipDelay: "rain delay active",
+    histFlow: "Flow alert",
+    histFlowNo: "no flow — valve may be stuck",
+    histFlowLeak: "water flowing while idle — possible leak",
     today: "Today",
     yesterday: "Yesterday",
+    tomorrow: "Tomorrow",
+    nextRun: (t) => `Next: ${t}`,
     tabNotify: "Notifications",
     notifyTargets: "Targets",
     notifyNoTargets: "No notify services or entities found.",
@@ -124,6 +134,41 @@ const STR = {
     breakdownTitle: "Zones",
     dayNoRuns: "No zone runs this day.",
     retentionNote: (d) => `History is kept for up to ${d} days.`,
+    tabAdvanced: "Advanced",
+    seasonalTitle: "Seasonal adjustment",
+    seasonalLabel: "Adjust all zone durations",
+    seasonalHint: "100% = configured time. Scales every zone's run.",
+    masterTitle: "Master valve / pump",
+    masterEntity: "Master valve / pump",
+    masterLead: "Lead time (s)",
+    masterHint: "Opened while any zone runs, closed afterwards.",
+    freezeTitle: "Freeze skip (scheduled runs)",
+    skipIfFreeze: "Skip if freezing",
+    freezeEntity: "Temperature entity",
+    freezeThreshold: "Skip at/below (°)",
+    soilTitle: "Soil-moisture skip (scheduled runs)",
+    skipIfSoil: "Skip if soil is moist",
+    soilEntity: "Soil-moisture sensor",
+    soilThreshold: "Skip at/above (%)",
+    flowTitle: "Flow / leak monitoring",
+    flowEnable: "Monitor flow",
+    flowEntity: "Flow sensor",
+    flowMin: "Min flow while running",
+    notifyFlowLabel: "Notify on flow anomaly (critical)",
+    cyclesLabel: "Cycles",
+    soakLabel: "Soak (min)",
+    rainDelay: "Rain delay",
+    rainDelayActive: (t) => `Watering paused until ${t}`,
+    resume: "Resume",
+    rainDelayPrompt: "Pause all watering for how many hours?",
+    runFor: "Run for…",
+    runForPrompt: "Run this zone for how many minutes?",
+    lastWatered: (t) => `last ${t}`,
+    relDay: (n) => `${n}d ago`,
+    relHour: (n) => `${n}h ago`,
+    relMin: (n) => `${n}m ago`,
+    relNow: "just now",
+    adjusted: "adj",
   },
   pt: {
     title: "Rega do jardim",
@@ -163,6 +208,8 @@ const STR = {
     removeSchedFail: (e) => `Não foi possível remover o agendamento: ${e}`,
     skipRain: "A rega agendada será ignorada — choveu recentemente",
     skipForecast: "A rega agendada será ignorada — previsão de chuva",
+    skipFreeze: "A rega agendada será ignorada — gelo",
+    skipSoil: "A rega agendada será ignorada — solo já húmido",
     rainSkipTitle: "Ignorar com chuva (execuções agendadas)",
     rainEntity: "Sensor de chuva / meteorologia",
     forecastEntity: "Meteorologia (previsão)",
@@ -196,8 +243,16 @@ const STR = {
     histOffFailed: "pode continuar aberta — o interruptor não confirmou o fecho",
     histSkipRecent: "choveu recentemente",
     histSkipForecast: "previsão de chuva",
+    histSkipFreeze: "temperatura de gelo",
+    histSkipSoil: "solo já húmido",
+    histSkipDelay: "adiamento por chuva ativo",
+    histFlow: "Alerta de caudal",
+    histFlowNo: "sem caudal — a válvula pode estar presa",
+    histFlowLeak: "caudal em repouso — possível fuga",
     today: "Hoje",
     yesterday: "Ontem",
+    tomorrow: "Amanhã",
+    nextRun: (t) => `Próxima: ${t}`,
     tabNotify: "Notificações",
     notifyTargets: "Destinos",
     notifyNoTargets: "Nenhum serviço ou entidade de notificação encontrado.",
@@ -230,6 +285,41 @@ const STR = {
     breakdownTitle: "Zonas",
     dayNoRuns: "Sem regas neste dia.",
     retentionNote: (d) => `O histórico é mantido até ${d} dias.`,
+    tabAdvanced: "Avançado",
+    seasonalTitle: "Ajuste sazonal",
+    seasonalLabel: "Ajustar a duração de todas as zonas",
+    seasonalHint: "100% = tempo configurado. Escala a rega de cada zona.",
+    masterTitle: "Válvula principal / bomba",
+    masterEntity: "Válvula principal / bomba",
+    masterLead: "Tempo de avanço (s)",
+    masterHint: "Aberta enquanto qualquer zona rega, fechada no fim.",
+    freezeTitle: "Ignorar com gelo (execuções agendadas)",
+    skipIfFreeze: "Ignorar se gelar",
+    freezeEntity: "Entidade de temperatura",
+    freezeThreshold: "Ignorar a/abaixo de (°)",
+    soilTitle: "Ignorar com solo húmido (execuções agendadas)",
+    skipIfSoil: "Ignorar se o solo estiver húmido",
+    soilEntity: "Sensor de humidade do solo",
+    soilThreshold: "Ignorar a/acima de (%)",
+    flowTitle: "Monitorização de caudal / fugas",
+    flowEnable: "Monitorizar caudal",
+    flowEntity: "Sensor de caudal",
+    flowMin: "Caudal mínimo durante a rega",
+    notifyFlowLabel: "Notificar anomalia de caudal (crítico)",
+    cyclesLabel: "Ciclos",
+    soakLabel: "Absorção (min)",
+    rainDelay: "Adiar por chuva",
+    rainDelayActive: (t) => `Rega em pausa até ${t}`,
+    resume: "Retomar",
+    rainDelayPrompt: "Pausar toda a rega durante quantas horas?",
+    runFor: "Regar durante…",
+    runForPrompt: "Regar esta zona durante quantos minutos?",
+    lastWatered: (t) => `última ${t}`,
+    relDay: (n) => `há ${n}d`,
+    relHour: (n) => `há ${n}h`,
+    relMin: (n) => `há ${n}m`,
+    relNow: "agora mesmo",
+    adjusted: "aj",
   },
 };
 
@@ -491,6 +581,25 @@ const STYLES = `
   .raininfo b { color: var(--primary-text-color); font-weight: 650; font-variant-numeric: tabular-nums; }
   .rainbox { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin-top: 12px; }
   .rainbox-title { font-weight: 600; font-size: .9rem; margin-bottom: 6px; }
+  .adv-hint { color: var(--secondary-text-color); font-size: .78rem; margin-top: 8px; line-height: 1.35; }
+  .delaybar {
+    display: flex; align-items: center; gap: 10px; margin: 6px 0 10px;
+    padding: 11px 14px; border-radius: 12px; font-size: .86rem; font-weight: 500;
+    color: var(--primary-color); background: rgba(3, 169, 244, .10);
+  }
+  .delaybar ha-icon { --mdc-icon-size: 20px; flex: none; }
+  .delaybar .resume { margin-left: auto; flex: none; padding: 6px 12px; border: none;
+    border-radius: 8px; cursor: pointer; font: inherit; font-size: .82rem; font-weight: 600;
+    color: var(--primary-color); background: rgba(3,169,244,.16); }
+  .vmeta .last { opacity: .85; }
+  .vmeta .adj { color: var(--warning-color, #d68f00); font-weight: 600; }
+  .vnext { display: flex; align-items: center; gap: 6px; margin-top: 5px;
+    color: var(--secondary-text-color); font-size: .82rem; }
+  .vnext ha-icon { --mdc-icon-size: 16px; color: var(--primary-color); flex: none; }
+  .vnext[hidden] { display: none; }
+  .season-badge { display: inline-flex; align-items: center; gap: 4px; font-size: .72rem;
+    font-weight: 600; color: var(--warning-color, #d68f00); background: rgba(214,143,0,.13);
+    border-radius: 999px; padding: 2px 9px; margin-left: 8px; }
   .rain-sec { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
   .rain-sec-label { font-weight: 600; font-size: .88rem; }
   .field-row.dim { opacity: .5; }
@@ -699,8 +808,14 @@ class GardenIrrigationCard extends HTMLElement {
     if (!setup) return;
 
     if (setup.enabled === false) card.classList.add("setup-off");
+    if (!this._edit && setup.rain_delay_until)
+      card.appendChild(this._buildDelayBanner(setup));
     const rainInfo = this._buildRainInfo(setup, this._skip[setup.entry_id]);
     if (rainInfo) card.appendChild(rainInfo);
+    if (!this._edit) {
+      const season = this._buildSeasonLine(setup);
+      if (season) card.appendChild(season);
+    }
     if (this._edit) card.appendChild(this._buildSetupBar(setup));
     if (setup.mode === "sequential") card.appendChild(this._buildSeqBar(setup));
     if (this._edit && setup.mode === "sequential")
@@ -729,11 +844,93 @@ class GardenIrrigationCard extends HTMLElement {
     )
       footer.appendChild(this._seqRunButton(setup));
 
+    const delay = document.createElement("button");
+    if (setup.rain_delay_until) {
+      delay.innerHTML = `<ha-icon icon="mdi:weather-sunny"></ha-icon> ${this._t("resume")}`;
+      delay.addEventListener("click", () => this._setRainDelay(setup, 0));
+    } else {
+      delay.innerHTML = `<ha-icon icon="mdi:weather-rainy"></ha-icon> ${this._t("rainDelay")}`;
+      delay.addEventListener("click", () => this._promptRainDelay(setup));
+    }
+    footer.appendChild(delay);
+
     const hist = document.createElement("button");
     hist.innerHTML = `<ha-icon icon="mdi:history"></ha-icon> ${this._t("history")}`;
     hist.addEventListener("click", () => this._openHistory());
     footer.appendChild(hist);
     return footer;
+  }
+
+  _buildDelayBanner(setup) {
+    const bar = document.createElement("div");
+    bar.className = "delaybar";
+    const until = new Date(setup.rain_delay_until);
+    const t = until.toLocaleString(this._lang() === "pt" ? "pt-PT" : "en", {
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    bar.innerHTML =
+      `<ha-icon icon="mdi:weather-rainy"></ha-icon>` +
+      `<span>${this._escape(this._t("rainDelayActive", t))}</span>`;
+    const resume = document.createElement("button");
+    resume.className = "resume";
+    resume.textContent = this._t("resume");
+    resume.addEventListener("click", () => this._setRainDelay(setup, 0));
+    bar.appendChild(resume);
+    return bar;
+  }
+
+  _buildSeasonLine(setup) {
+    const pct = Number(setup.seasonal_adjust);
+    if (isNaN(pct) || pct === 100) return null;
+    const div = document.createElement("div");
+    div.className = "skipwarn";
+    div.innerHTML =
+      `<ha-icon icon="mdi:calendar-sync"></ha-icon>` +
+      `<span>${this._escape(this._t("seasonalTitle"))}: <b>${pct}%</b></span>`;
+    return div;
+  }
+
+  async _promptRainDelay(setup) {
+    const ans = window.prompt(this._t("rainDelayPrompt"), "24");
+    if (ans == null) return;
+    const hrs = parseFloat(ans);
+    if (!hrs || hrs <= 0) return;
+    this._setRainDelay(setup, hrs);
+  }
+
+  async _setRainDelay(setup, hours) {
+    try {
+      await this._ws({
+        type: "garden_irrigation/setup/rain_delay",
+        entry_id: setup.entry_id,
+        hours,
+      });
+      await this._fetch();
+    } catch (err) {
+      this._toast(this._t("actionFailed", err.message || err));
+    }
+  }
+
+  async _runCustom(setup, zone) {
+    const ans = window.prompt(
+      this._t("runForPrompt"),
+      String(zone.effective_duration ?? zone.duration)
+    );
+    if (ans == null) return;
+    const mins = parseInt(ans, 10);
+    if (!mins || mins < 1) return;
+    try {
+      await this._ws({
+        type: "garden_irrigation/zone/start",
+        entry_id: setup.entry_id,
+        zone_id: zone.zone_id,
+        duration: Math.min(60, mins),
+      });
+    } catch (err) {
+      this._toast(this._t("actionFailed", err.message || err));
+    }
   }
 
   async _openHistory() {
@@ -1300,6 +1497,7 @@ class GardenIrrigationCard extends HTMLElement {
         stop: { icon: "mdi:stop-circle", cls: "h-grey" },
         skip: { icon: "mdi:weather-rainy", cls: "h-amber" },
         error: { icon: "mdi:alert-circle", cls: "h-red" },
+        flow: { icon: "mdi:water-alert", cls: "h-amber" },
       }[type] || { icon: "mdi:information-outline", cls: "h-grey" }
     );
   }
@@ -1323,9 +1521,21 @@ class GardenIrrigationCard extends HTMLElement {
         return {
           title: this._t("histSkipped"),
           sub:
-            ev.detail === "rain_forecast"
-              ? this._t("histSkipForecast")
-              : this._t("histSkipRecent"),
+            {
+              rain_forecast: this._t("histSkipForecast"),
+              rain_recent: this._t("histSkipRecent"),
+              freeze: this._t("histSkipFreeze"),
+              soil_wet: this._t("histSkipSoil"),
+              rain_delay: this._t("histSkipDelay"),
+            }[ev.detail] || this._t("histSkipRecent"),
+        };
+      case "flow":
+        return {
+          title: this._t("histFlow"),
+          sub:
+            ev.detail === "leak"
+              ? this._t("histFlowLeak")
+              : `${ev.zone ? ev.zone + " · " : ""}${this._t("histFlowNo")}`,
         };
       case "error":
         return { title: ev.zone, sub: this._t("histOffFailed") };
@@ -1395,6 +1605,8 @@ class GardenIrrigationCard extends HTMLElement {
       body.appendChild(this._buildNotify(setup));
     } else if (this._tab === "rain") {
       body.appendChild(this._buildRainSkip(setup));
+    } else if (this._tab === "advanced") {
+      body.appendChild(this._buildAdvanced(setup));
     } else if (this._tab === "scripts") {
       if (setup.mode === "sequential") {
         body.appendChild(this._buildSeqScripts(setup));
@@ -1450,6 +1662,7 @@ class GardenIrrigationCard extends HTMLElement {
       ["schedule", this._t("tabSchedule")],
       ["scripts", this._t("tabScripts")],
       ["rain", this._t("tabRain")],
+      ["advanced", this._t("tabAdvanced")],
       ["notify", this._t("tabNotify")],
     ].forEach(([id, label]) => {
       const b = document.createElement("button");
@@ -1624,7 +1837,11 @@ class GardenIrrigationCard extends HTMLElement {
 
   _buildRainInfo(setup, skip) {
     // Actively skipping right now → amber warning (both modes).
-    if (skip && skip.would_skip) return this._buildSkipBanner(skip);
+    if (skip && skip.would_skip) {
+      const banner = this._buildSkipBanner(skip);
+      // rain_delay is already shown by the dedicated blue delay banner.
+      return banner;
+    }
     // Edit mode has the full rain-skip config box instead.
     if (this._edit) return null;
     const recentActive = setup.rain_entity && setup.rain_enabled !== false;
@@ -1655,12 +1872,17 @@ class GardenIrrigationCard extends HTMLElement {
   }
 
   _buildSkipBanner(skip) {
+    // The manual rain delay has its own dedicated banner.
+    if (skip.reason === "rain_delay") return null;
     const div = document.createElement("div");
     div.className = "skipwarn";
     const text =
-      skip.reason === "rain_forecast"
-        ? this._t("skipForecast")
-        : this._t("skipRain");
+      {
+        rain_forecast: this._t("skipForecast"),
+        rain_recent: this._t("skipRain"),
+        freeze: this._t("skipFreeze"),
+        soil_wet: this._t("skipSoil"),
+      }[skip.reason] || this._t("skipRain");
     div.innerHTML = `<ha-icon icon="mdi:weather-rainy"></ha-icon><span>${this._escape(
       text
     )}</span>`;
@@ -1735,6 +1957,192 @@ class GardenIrrigationCard extends HTMLElement {
       )
     );
     return box;
+  }
+
+  _buildAdvanced(setup) {
+    const wrap = document.createElement("div");
+
+    // --- Seasonal adjustment ---
+    const season = document.createElement("div");
+    season.className = "rainbox";
+    const sTitle = document.createElement("div");
+    sTitle.className = "rainbox-title";
+    sTitle.textContent = this._t("seasonalTitle");
+    season.appendChild(sTitle);
+    const sRow = document.createElement("div");
+    sRow.className = "rain-sec";
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = "0";
+    slider.max = "200";
+    slider.step = "5";
+    slider.value = String(setup.seasonal_adjust ?? 100);
+    slider.style.flex = "1";
+    const sVal = document.createElement("span");
+    sVal.className = "rain-sec-label";
+    sVal.style.minWidth = "48px";
+    sVal.style.textAlign = "right";
+    sVal.textContent = `${setup.seasonal_adjust ?? 100}%`;
+    slider.addEventListener("input", () => {
+      sVal.textContent = `${slider.value}%`;
+    });
+    slider.addEventListener("change", () =>
+      this._updateSetup(setup.entry_id, {
+        seasonal_adjust: parseInt(slider.value, 10),
+      })
+    );
+    sRow.append(slider, sVal);
+    season.appendChild(sRow);
+    season.appendChild(this._hint(this._t("seasonalHint")));
+    wrap.appendChild(season);
+
+    // --- Master valve / pump ---
+    const master = document.createElement("div");
+    master.className = "rainbox";
+    const mTitle = document.createElement("div");
+    mTitle.className = "rainbox-title";
+    mTitle.textContent = this._t("masterTitle");
+    master.appendChild(mTitle);
+    const mRow = document.createElement("div");
+    mRow.className = "field-row";
+    mRow.appendChild(
+      this._labeledField(
+        this._t("masterEntity"),
+        this._entityPicker(
+          setup.master_entity,
+          ["switch", "valve", "input_boolean"],
+          (v) => this._updateSetup(setup.entry_id, { master_entity: v || null })
+        ).el
+      )
+    );
+    mRow.appendChild(
+      this._numField(this._t("masterLead"), setup.master_lead ?? 0, 0, 120, 1, (v) =>
+        this._updateSetup(setup.entry_id, { master_lead: v })
+      )
+    );
+    master.appendChild(mRow);
+    master.appendChild(this._hint(this._t("masterHint")));
+    wrap.appendChild(master);
+
+    // --- Freeze skip ---
+    const freeze = document.createElement("div");
+    freeze.className = "rainbox";
+    const fTitle = document.createElement("div");
+    fTitle.className = "rainbox-title";
+    fTitle.textContent = this._t("freezeTitle");
+    freeze.appendChild(fTitle);
+    const fRow = document.createElement("div");
+    fRow.className = "field-row";
+    fRow.appendChild(
+      this._labeledField(
+        this._t("freezeEntity"),
+        this._entityPicker(setup.freeze_entity, ["sensor", "weather"], (v) =>
+          this._updateSetup(setup.entry_id, { freeze_entity: v || null })
+        ).el
+      )
+    );
+    fRow.appendChild(
+      this._numField(
+        this._t("freezeThreshold"),
+        setup.freeze_threshold,
+        -20,
+        50,
+        0.5,
+        (v) => this._updateSetup(setup.entry_id, { freeze_threshold: v })
+      )
+    );
+    freeze.appendChild(
+      this._rainSection(
+        this._t("skipIfFreeze"),
+        setup.freeze_enabled === true,
+        (v) => this._updateSetup(setup.entry_id, { freeze_enabled: v }),
+        fRow
+      )
+    );
+    wrap.appendChild(freeze);
+
+    // --- Soil-moisture skip ---
+    const soil = document.createElement("div");
+    soil.className = "rainbox";
+    const soTitle = document.createElement("div");
+    soTitle.className = "rainbox-title";
+    soTitle.textContent = this._t("soilTitle");
+    soil.appendChild(soTitle);
+    const soRow = document.createElement("div");
+    soRow.className = "field-row";
+    soRow.appendChild(
+      this._labeledField(
+        this._t("soilEntity"),
+        this._entityPicker(setup.soil_entity, ["sensor"], (v) =>
+          this._updateSetup(setup.entry_id, { soil_entity: v || null })
+        ).el
+      )
+    );
+    soRow.appendChild(
+      this._numField(this._t("soilThreshold"), setup.soil_threshold, 0, 100, 1, (v) =>
+        this._updateSetup(setup.entry_id, { soil_threshold: v })
+      )
+    );
+    soil.appendChild(
+      this._rainSection(
+        this._t("skipIfSoil"),
+        setup.soil_enabled === true,
+        (v) => this._updateSetup(setup.entry_id, { soil_enabled: v }),
+        soRow
+      )
+    );
+    wrap.appendChild(soil);
+
+    // --- Flow / leak monitoring ---
+    const flow = document.createElement("div");
+    flow.className = "rainbox";
+    const flTitle = document.createElement("div");
+    flTitle.className = "rainbox-title";
+    flTitle.textContent = this._t("flowTitle");
+    flow.appendChild(flTitle);
+    const flRow = document.createElement("div");
+    flRow.className = "field-row";
+    flRow.appendChild(
+      this._labeledField(
+        this._t("flowEntity"),
+        this._entityPicker(setup.flow_entity, ["sensor"], (v) =>
+          this._updateSetup(setup.entry_id, { flow_entity: v || null })
+        ).el
+      )
+    );
+    flRow.appendChild(
+      this._numField(this._t("flowMin"), setup.flow_min, 0, 1000, 0.1, (v) =>
+        this._updateSetup(setup.entry_id, { flow_min: v })
+      )
+    );
+    flow.appendChild(
+      this._rainSection(
+        this._t("flowEnable"),
+        setup.flow_enabled === true,
+        (v) => this._updateSetup(setup.entry_id, { flow_enabled: v }),
+        flRow
+      )
+    );
+    const nf = document.createElement("div");
+    nf.className = "rain-sec";
+    const nfSw = this._switch(setup.notify_flow === true, (v) =>
+      this._updateSetup(setup.entry_id, { notify_flow: v })
+    );
+    const nfLbl = document.createElement("span");
+    nfLbl.className = "rain-sec-label";
+    nfLbl.textContent = this._t("notifyFlowLabel");
+    nf.append(nfSw, nfLbl);
+    flow.appendChild(nf);
+    wrap.appendChild(flow);
+
+    return wrap;
+  }
+
+  _hint(text) {
+    const h = document.createElement("div");
+    h.className = "adv-hint";
+    h.textContent = text;
+    return h;
   }
 
   _buildNotify(setup) {
@@ -2104,19 +2512,62 @@ class GardenIrrigationCard extends HTMLElement {
   }
 
   _zoneMetaHtml(setup, zone) {
-    const dur = `<span class="dur">${zone.duration} min</span>`;
+    const eff = zone.effective_duration ?? zone.duration;
+    const adj =
+      eff !== zone.duration
+        ? ` <span class="adj">(${this._escape(this._t("adjusted"))})</span>`
+        : "";
+    const dur = `<span class="dur">${eff} min</span>${adj}`;
+    let main;
     if (setup.mode === "sequential") {
       const idx = setup.zones.findIndex((z) => z.zone_id === zone.zone_id);
-      return `${dur} · ${this._escape(this._t("runsNth", idx + 1))}`;
+      main = `${dur} · ${this._escape(this._t("runsNth", idx + 1))}`;
+    } else {
+      const times = (zone.schedules || []).map((s) => this._escape(s.time));
+      if (times.length === 0)
+        main = `${dur} · <span style="opacity:.85">${this._escape(
+          this._t("noSchedules").toLowerCase()
+        )}</span>`;
+      else {
+        const shown = times.slice(0, 3).join(" · ");
+        const extra = times.length > 3 ? ` +${times.length - 3}` : "";
+        main = `${dur} · ${shown}${extra}`;
+      }
     }
-    const times = (zone.schedules || []).map((s) => this._escape(s.time));
-    if (times.length === 0)
-      return `${dur} · <span style="opacity:.85">${this._escape(
-        this._t("noSchedules").toLowerCase()
-      )}</span>`;
-    const shown = times.slice(0, 3).join(" · ");
-    const extra = times.length > 3 ? ` +${times.length - 3}` : "";
-    return `${dur} · ${shown}${extra}`;
+    const extras = [];
+    if (zone.cycles > 1) extras.push(`${zone.cycles}×`);
+    if (zone.last_watered)
+      extras.push(
+        `<span class="last">${this._escape(
+          this._t("lastWatered", this._relTime(zone.last_watered))
+        )}</span>`
+      );
+    return main + (extras.length ? ` · ${extras.join(" · ")}` : "");
+  }
+
+  _fmtFuture(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const locale = this._lang() === "pt" ? "pt-PT" : "en";
+    const now = new Date();
+    const tom = new Date(now);
+    tom.setDate(now.getDate() + 1);
+    const time = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+    if (d.toDateString() === now.toDateString()) return `${this._t("today")} ${time}`;
+    if (d.toDateString() === tom.toDateString())
+      return `${this._t("tomorrow")} ${time}`;
+    return `${d.toLocaleDateString(locale, { weekday: "short" })} ${time}`;
+  }
+
+  _relTime(iso) {
+    const then = new Date(iso).getTime();
+    if (isNaN(then)) return "";
+    const mins = Math.floor(Math.max(0, Date.now() - then) / 60000);
+    if (mins < 1) return this._t("relNow");
+    if (mins < 60) return this._t("relMin", mins);
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return this._t("relHour", hrs);
+    return this._t("relDay", Math.floor(hrs / 24));
   }
 
   _buildZoneView(setup, zone) {
@@ -2146,6 +2597,24 @@ class GardenIrrigationCard extends HTMLElement {
     meta.innerHTML = this._zoneMetaHtml(setup, zone);
     info.appendChild(meta);
 
+    const next = document.createElement("div");
+    next.className = "vnext";
+    if (
+      setup.mode === "specific" &&
+      zone.next_run &&
+      zone.enabled !== false &&
+      setup.enabled !== false
+    ) {
+      next.innerHTML =
+        `<ha-icon icon="mdi:calendar-clock"></ha-icon>` +
+        `<span>${this._escape(this._t("nextRun", this._fmtFuture(zone.next_run)))}</span>`;
+    } else {
+      next.hidden = true;
+    }
+    info.appendChild(next);
+    refs.next = next;
+    refs.hasNext = !next.hidden;
+
     const progress = document.createElement("div");
     progress.className = "vprogress";
     progress.hidden = true;
@@ -2160,7 +2629,12 @@ class GardenIrrigationCard extends HTMLElement {
     refs.progress = progress;
     refs.fill = fill;
     refs.left = left;
-    refs.total = Math.max(1, zone.duration * 60);
+    const effMin = zone.effective_duration ?? zone.duration;
+    const cyc = Math.max(1, zone.cycles || 1);
+    refs.total = Math.max(
+      1,
+      effMin * 60 + (zone.soak || 0) * 60 * (cyc - 1)
+    );
 
     el.appendChild(info);
 
@@ -2173,6 +2647,14 @@ class GardenIrrigationCard extends HTMLElement {
     // Run button (always available — a manual run works even on a disabled zone),
     // then the per-zone enable toggle. Both hidden only when the whole setup is off.
     if (setupEnabled) {
+      const custom = document.createElement("button");
+      custom.className = "runbtn";
+      custom.title = this._t("runFor");
+      custom.innerHTML = `<ha-icon icon="mdi:timer-play-outline"></ha-icon>`;
+      custom.addEventListener("click", () => this._runCustom(setup, zone));
+      actions.appendChild(custom);
+      refs.custom = custom;
+
       const action = document.createElement("button");
       action.addEventListener("click", () => this._toggleRun(zone));
       actions.appendChild(action);
@@ -2283,6 +2765,25 @@ class GardenIrrigationCard extends HTMLElement {
     el.appendChild(durRow);
     refs.slider = slider;
     refs.durVal = durVal;
+
+    // Cycle & soak (optional — split a run into bursts with soak gaps)
+    if (this._edit) {
+      const csRow = document.createElement("div");
+      csRow.className = "field-row";
+      csRow.appendChild(
+        this._numField(this._t("cyclesLabel"), zone.cycles ?? 1, 1, 6, 1, (v) =>
+          this._updateZone(setup.entry_id, zone.zone_id, {
+            cycles: Math.round(v),
+          })
+        )
+      );
+      csRow.appendChild(
+        this._numField(this._t("soakLabel"), zone.soak ?? 0, 0, 60, 1, (v) =>
+          this._updateZone(setup.entry_id, zone.zone_id, { soak: Math.round(v) })
+        )
+      );
+      el.appendChild(csRow);
+    }
 
     // Schedules (specific mode only)
     if (setup.mode === "specific") {
@@ -2461,6 +2962,8 @@ class GardenIrrigationCard extends HTMLElement {
         refs.pill.hidden = !running;
         if (running) refs.pillText.textContent = this._t(source);
         refs.progress.hidden = !running;
+        if (refs.custom) refs.custom.hidden = running;
+        if (refs.next) refs.next.hidden = running || !refs.hasNext;
         if (refs.action) {
           refs.action.className = running ? "runbtn stop" : "runbtn";
           refs.action.title = running ? this._t("stop") : this._t("run");

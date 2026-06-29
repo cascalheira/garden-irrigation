@@ -55,13 +55,31 @@
           "forecast_entity": "Forecast weather entity",
           "forecast_hours": "Forecast — look-ahead (hours)",
           "forecast_threshold": "Forecast — rain chance threshold (%)",
+          "seasonal_adjust": "Seasonal adjustment (% of each zone's duration)",
+          "master_entity": "Master valve / pump (optional)",
+          "master_lead": "Master valve lead time (seconds)",
+          "freeze_enabled": "Skip if freezing",
+          "freeze_entity": "Temperature entity (sensor / weather)",
+          "freeze_threshold": "Freeze — skip at/below (°)",
+          "soil_enabled": "Skip if soil is moist",
+          "soil_entity": "Soil-moisture sensor",
+          "soil_threshold": "Soil — skip at/above (%)",
+          "flow_enabled": "Flow / leak monitoring",
+          "flow_entity": "Flow-rate sensor",
+          "flow_min": "Minimum expected flow while running",
           "notify_off_failed": "Notify: valve fails to close (critical)",
           "notify_start_failed": "Notify: zone fails to start",
-          "notify_skip": "Notify: watering skipped (rain)"
+          "notify_skip": "Notify: watering skipped (rain)",
+          "notify_flow": "Notify: flow anomaly (no-flow / leak, critical)"
         },
         "data_description": {
           "rain_entity": "Skip a scheduled run if this shows rain in the look-back window. A weather entity uses its current precipitation; a binary sensor counts any 'on'.",
           "forecast_entity": "Skip a scheduled run if this weather entity forecasts rain above the chance threshold within the look-ahead window.",
+          "seasonal_adjust": "Scales every zone's run time. 100% = no change; 50% halves it, 150% adds half again.",
+          "master_entity": "A main valve or pump opened while any zone in this setup runs (and closed after). Leave empty if unused.",
+          "freeze_entity": "Skip a scheduled run when this temperature is at or below the threshold (frost protection).",
+          "soil_entity": "Skip a scheduled run when this moisture reading is at or above the threshold.",
+          "flow_entity": "Warns if a zone runs with no flow (stuck valve) or water flows while idle (leak). Notifications are sent if the flow notification is enabled.",
           "notify_off_failed": "Notification targets are chosen on the dashboard card (Notifications tab)."
         }
       },
@@ -98,12 +116,16 @@
             "name": "Zone name",
             "switch_entity": "Switch / relay",
             "duration": "Run duration (minutes)",
+            "cycles": "Cycles (split the run into bursts)",
+            "soak": "Soak between cycles (minutes)",
             "pre_script": "Pre-irrigation script (optional)",
             "post_script": "Post-irrigation script (optional)"
           },
           "data_description": {
             "switch_entity": "The switch or input_boolean that opens this zone's valve.",
             "duration": "How long the zone waters each run (1-60 minutes).",
+            "cycles": "Split the run time into this many bursts to reduce runoff (1 = continuous).",
+            "soak": "Time the valve stays closed between cycles so water can soak in.",
             "pre_script": "Script run and awaited before the valve opens (e.g. open main supply).",
             "post_script": "Script run and awaited after the valve closes (e.g. notify, close supply)."
           }
@@ -161,6 +183,9 @@
     "sensor": {
       "remaining": {
         "name": "Time remaining"
+      },
+      "total": {
+        "name": "Total watering time"
       }
     }
   },

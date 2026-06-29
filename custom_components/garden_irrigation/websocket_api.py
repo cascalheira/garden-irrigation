@@ -18,15 +18,25 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
+    CONF_CYCLES,
     CONF_DAYS,
     CONF_DURATION,
     CONF_ENABLED,
+    CONF_FLOW_ENABLED,
+    CONF_FLOW_ENTITY,
+    CONF_FLOW_MIN,
     CONF_FORECAST_ENABLED,
     CONF_FORECAST_ENTITY,
     CONF_FORECAST_HOURS,
     CONF_FORECAST_THRESHOLD,
+    CONF_FREEZE_ENABLED,
+    CONF_FREEZE_ENTITY,
+    CONF_FREEZE_THRESHOLD,
+    CONF_MASTER_ENTITY,
+    CONF_MASTER_LEAD,
     CONF_MODE,
     CONF_NAME,
+    CONF_NOTIFY_FLOW,
     CONF_NOTIFY_OFF_FAILED,
     CONF_NOTIFY_SKIP,
     CONF_NOTIFY_START_FAILED,
@@ -39,20 +49,37 @@ from .const import (
     CONF_RAIN_HOURS,
     CONF_RAIN_THRESHOLD,
     CONF_SCHEDULES,
+    CONF_SEASONAL_ADJUST,
+    CONF_SOAK,
+    CONF_SOIL_ENABLED,
+    CONF_SOIL_ENTITY,
+    CONF_SOIL_THRESHOLD,
     CONF_START_TIME,
     CONF_START_TIMES,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
+    DEFAULT_CYCLES,
     DEFAULT_DURATION,
+    DEFAULT_FLOW_MIN,
     DEFAULT_FORECAST_HOURS,
     DEFAULT_FORECAST_THRESHOLD,
+    DEFAULT_FREEZE_THRESHOLD,
+    DEFAULT_MASTER_LEAD,
     DEFAULT_MODE,
     DEFAULT_RAIN_HOURS,
     DEFAULT_RAIN_THRESHOLD,
+    DEFAULT_SEASONAL_ADJUST,
+    DEFAULT_SOAK,
+    DEFAULT_SOIL_THRESHOLD,
     DEFAULT_START_TIME,
     DOMAIN,
+    MAX_CYCLES,
     MAX_DURATION,
+    MAX_MASTER_LEAD,
+    MAX_SEASONAL_ADJUST,
+    MAX_SOAK,
     MIN_DURATION,
+    MIN_SEASONAL_ADJUST,
     MODES,
     SUBENTRY_TYPE_ZONE,
     WEEKDAYS,
@@ -73,6 +100,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         ws_remove_start_time,
         ws_run_setup,
         ws_stop_setup,
+        ws_rain_delay,
+        ws_start_zone,
         ws_skip_status,
         ws_history,
         ws_clear_history,
@@ -96,16 +125,23 @@ def _entry(hass: HomeAssistant, entry_id: str) -> ConfigEntry | None:
 
 @callback
 def _zone_payload(
-    hass: HomeAssistant, entry_id: str, subentry_id: str, data: dict[str, Any]
+    hass: HomeAssistant,
+    entry_id: str,
+    subentry_id: str,
+    data: dict[str, Any],
+    controller: Any = None,
 ) -> dict[str, Any]:
     ent_reg = er.async_get(hass)
-    return {
+    name = data.get(CONF_NAME)
+    payload = {
         "zone_id": subentry_id,
         "entry_id": entry_id,
-        "name": data.get(CONF_NAME),
+        "name": name,
         "enabled": data.get(CONF_ENABLED, True),
         "switch_entity": data.get(CONF_SWITCH_ENTITY),
         "duration": int(data.get(CONF_DURATION, DEFAULT_DURATION)),
+        "cycles": int(data.get(CONF_CYCLES, DEFAULT_CYCLES) or DEFAULT_CYCLES),
+        "soak": int(data.get(CONF_SOAK, DEFAULT_SOAK) or DEFAULT_SOAK),
         "schedules": list(data.get(CONF_SCHEDULES, [])),
         "pre_script": data.get(CONF_PRE_SCRIPT),
         "post_script": data.get(CONF_POST_SCRIPT),
@@ -113,7 +149,20 @@ def _zone_payload(
         "sensor_entity_id": ent_reg.async_get_entity_id(
             "sensor", DOMAIN, f"{subentry_id}_remaining"
         ),
+        "last_watered": None,
+        "next_run": None,
+        "total_minutes": 0,
+        "effective_duration": int(data.get(CONF_DURATION, DEFAULT_DURATION)),
     }
+    if controller is not None:
+        zone = controller.get_zone(subentry_id)
+        if zone is not None:
+            payload["effective_duration"] = controller.effective_minutes(zone)
+        payload["last_watered"] = controller.last_watered(name)
+        payload["total_minutes"] = controller.total_minutes(subentry_id)
+        nxt = controller.next_run(subentry_id)
+        payload["next_run"] = nxt.isoformat() if nxt else None
+    return payload
 
 
 @callback
@@ -131,11 +180,16 @@ def _start_times(options: Any) -> list[dict[str, Any]]:
 @callback
 def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
     options = entry.options
+    controller = getattr(entry, "runtime_data", None)
     zones = [
-        _zone_payload(hass, entry.entry_id, sid, dict(sub.data))
+        _zone_payload(hass, entry.entry_id, sid, dict(sub.data), controller)
         for sid, sub in entry.subentries.items()
         if sub.subentry_type == SUBENTRY_TYPE_ZONE
     ]
+    rain_delay_until = None
+    if controller is not None and controller.rain_delay_active:
+        until = controller.rain_delay_until
+        rain_delay_until = until.isoformat() if until else None
     return {
         "entry_id": entry.entry_id,
         "name": entry.title,
@@ -144,6 +198,22 @@ def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         "start_times": _start_times(options),
         "pre_script": options.get(CONF_PRE_SCRIPT),
         "post_script": options.get(CONF_POST_SCRIPT),
+        "seasonal_adjust": options.get(CONF_SEASONAL_ADJUST, DEFAULT_SEASONAL_ADJUST),
+        "master_entity": options.get(CONF_MASTER_ENTITY),
+        "master_lead": options.get(CONF_MASTER_LEAD, DEFAULT_MASTER_LEAD),
+        "freeze_enabled": options.get(CONF_FREEZE_ENABLED, False),
+        "freeze_entity": options.get(CONF_FREEZE_ENTITY),
+        "freeze_threshold": options.get(
+            CONF_FREEZE_THRESHOLD, DEFAULT_FREEZE_THRESHOLD
+        ),
+        "soil_enabled": options.get(CONF_SOIL_ENABLED, False),
+        "soil_entity": options.get(CONF_SOIL_ENTITY),
+        "soil_threshold": options.get(CONF_SOIL_THRESHOLD, DEFAULT_SOIL_THRESHOLD),
+        "flow_enabled": options.get(CONF_FLOW_ENABLED, False),
+        "flow_entity": options.get(CONF_FLOW_ENTITY),
+        "flow_min": options.get(CONF_FLOW_MIN, DEFAULT_FLOW_MIN),
+        "notify_flow": options.get(CONF_NOTIFY_FLOW, False),
+        "rain_delay_until": rain_delay_until,
         "rain_enabled": options.get(CONF_RAIN_ENABLED, True),
         "rain_entity": options.get(CONF_RAIN_ENTITY),
         "rain_hours": options.get(CONF_RAIN_HOURS, DEFAULT_RAIN_HOURS),
@@ -248,6 +318,19 @@ async def ws_add_setup(
         vol.Optional("notify_off_failed"): bool,
         vol.Optional("notify_start_failed"): bool,
         vol.Optional("notify_skip"): bool,
+        vol.Optional("notify_flow"): bool,
+        vol.Optional("seasonal_adjust"): vol.Coerce(int),
+        vol.Optional("master_entity"): vol.Any(str, None),
+        vol.Optional("master_lead"): vol.Coerce(int),
+        vol.Optional("freeze_enabled"): bool,
+        vol.Optional("freeze_entity"): vol.Any(str, None),
+        vol.Optional("freeze_threshold"): vol.Coerce(float),
+        vol.Optional("soil_enabled"): bool,
+        vol.Optional("soil_entity"): vol.Any(str, None),
+        vol.Optional("soil_threshold"): vol.Coerce(float),
+        vol.Optional("flow_enabled"): bool,
+        vol.Optional("flow_entity"): vol.Any(str, None),
+        vol.Optional("flow_min"): vol.Coerce(float),
     }
 )
 @callback
@@ -267,9 +350,13 @@ def ws_update_setup(
         "enabled",
         "rain_enabled",
         "forecast_enabled",
+        "freeze_enabled",
+        "soil_enabled",
+        "flow_enabled",
         "notify_off_failed",
         "notify_start_failed",
         "notify_skip",
+        "notify_flow",
     ):
         if flag in msg:
             options[flag] = bool(msg[flag])
@@ -287,6 +374,10 @@ def ws_update_setup(
         CONF_POST_SCRIPT,
         CONF_RAIN_ENTITY,
         CONF_FORECAST_ENTITY,
+        CONF_MASTER_ENTITY,
+        CONF_FREEZE_ENTITY,
+        CONF_SOIL_ENTITY,
+        CONF_FLOW_ENTITY,
     ):
         if key in msg:
             if msg[key]:
@@ -298,6 +389,11 @@ def ws_update_setup(
         CONF_RAIN_THRESHOLD,
         CONF_FORECAST_HOURS,
         CONF_FORECAST_THRESHOLD,
+        CONF_SEASONAL_ADJUST,
+        CONF_MASTER_LEAD,
+        CONF_FREEZE_THRESHOLD,
+        CONF_SOIL_THRESHOLD,
+        CONF_FLOW_MIN,
     ):
         if key in msg and msg[key] is not None:
             options[key] = msg[key]
@@ -530,6 +626,65 @@ async def ws_stop_setup(
     connection.send_result(msg["id"], {})
 
 
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/setup/rain_delay",
+        vol.Required("entry_id"): str,
+        # hours > 0 sets a delay; 0 (or omitted) clears it.
+        vol.Optional("hours", default=0): vol.All(
+            vol.Coerce(float), vol.Range(min=0, max=240)
+        ),
+    }
+)
+@websocket_api.async_response
+async def ws_rain_delay(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Set or clear a manual rain delay (pause all watering)."""
+    entry = _entry(hass, msg["entry_id"])
+    controller = getattr(entry, "runtime_data", None) if entry else None
+    if controller is None:
+        connection.send_error(msg["id"], "not_found", "Setup not ready")
+        return
+    if msg["hours"] > 0:
+        await controller.async_set_rain_delay(msg["hours"])
+    else:
+        await controller.async_clear_rain_delay()
+    connection.send_result(msg["id"], _setup_payload(hass, entry))
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/zone/start",
+        vol.Required("entry_id"): str,
+        vol.Required("zone_id"): str,
+        vol.Optional("duration"): vol.All(
+            vol.Coerce(int), vol.Range(min=MIN_DURATION, max=MAX_DURATION)
+        ),
+    }
+)
+@websocket_api.async_response
+async def ws_start_zone(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Start a zone now, optionally for a custom duration (minutes)."""
+    entry = _entry(hass, msg["entry_id"])
+    controller = getattr(entry, "runtime_data", None) if entry else None
+    if controller is None or controller.get_zone(msg["zone_id"]) is None:
+        connection.send_error(msg["id"], "not_found", "Unknown zone")
+        return
+    await controller.async_start_zone(
+        msg["zone_id"], duration=msg.get("duration"), source="manual"
+    )
+    connection.send_result(msg["id"], {})
+
+
 # ----- zone (subentry) commands -------------------------------------------------
 
 
@@ -543,6 +698,10 @@ async def ws_stop_setup(
         vol.Optional("duration", default=DEFAULT_DURATION): vol.All(
             vol.Coerce(int), vol.Range(min=MIN_DURATION, max=MAX_DURATION)
         ),
+        vol.Optional("cycles"): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=MAX_CYCLES)
+        ),
+        vol.Optional("soak"): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_SOAK)),
         vol.Optional("pre_script"): vol.Any(str, None),
         vol.Optional("post_script"): vol.Any(str, None),
     }
@@ -565,6 +724,10 @@ def ws_add_zone(
         CONF_DURATION: msg["duration"],
         CONF_SCHEDULES: [],
     }
+    if msg.get("cycles") is not None:
+        data[CONF_CYCLES] = msg["cycles"]
+    if msg.get("soak") is not None:
+        data[CONF_SOAK] = msg["soak"]
     if msg.get("pre_script"):
         data[CONF_PRE_SCRIPT] = msg["pre_script"]
     if msg.get("post_script"):
@@ -594,6 +757,10 @@ def ws_add_zone(
         vol.Optional("duration"): vol.All(
             vol.Coerce(int), vol.Range(min=MIN_DURATION, max=MAX_DURATION)
         ),
+        vol.Optional("cycles"): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=MAX_CYCLES)
+        ),
+        vol.Optional("soak"): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_SOAK)),
         vol.Optional("pre_script"): vol.Any(str, None),
         vol.Optional("post_script"): vol.Any(str, None),
     }
@@ -618,6 +785,8 @@ def ws_update_zone(
         CONF_NAME,
         CONF_SWITCH_ENTITY,
         CONF_DURATION,
+        CONF_CYCLES,
+        CONF_SOAK,
         CONF_PRE_SCRIPT,
         CONF_POST_SCRIPT,
     ):

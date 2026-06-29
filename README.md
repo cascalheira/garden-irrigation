@@ -28,8 +28,27 @@ and services — no YAML required.
 - **Enable / disable** — in the card's view mode, a toggle pauses a whole setup
   or an individual zone (disabled items are excluded from scheduled and manual
   runs). When a setup is disabled, the per-zone toggles are hidden.
+- **Seasonal adjustment** (optional, per setup) — a single % budget scales every
+  zone's run time (e.g. 60% in spring, 130% in midsummer) without editing each
+  zone. 100% = no change.
+- **Cycle & soak** (optional, per zone) — split a run into several short bursts
+  with soak gaps so water absorbs instead of running off on clay or slopes.
+- **Master valve / pump** (optional, per setup) — a main valve or pump that opens
+  while any zone in the setup runs (with an optional lead time) and closes after.
+- **Freeze skip** and **soil-moisture skip** (optional, per setup; scheduled runs
+  only) — skip a run when a temperature entity is at/below a threshold, or a
+  moisture sensor is at/above one. Same pattern as rain skip.
+- **Rain delay** — a one-tap pause on the card that suspends all watering for a
+  chosen number of hours (with a banner and a Resume button); survives restarts.
+- **Flow / leak monitoring** (optional, per setup) — with a flow sensor, warn (and
+  optionally push a critical notification) when a zone runs with no flow (stuck
+  valve) or water flows while everything is idle (leak).
+- **Statistics** — an optional per-zone *Total watering time* sensor
+  (`total_increasing`) for the long-term Statistics dashboard, plus **last
+  watered** and **next run** shown on each zone card.
 - **Manual activation** — every zone is a switch entity you can toggle from any
-  dashboard, plus `garden_irrigation.start` (with optional duration override).
+  dashboard, a **Run for…** button for a custom one-off duration, plus
+  `garden_irrigation.start` (with optional duration override).
 - **Stop in progress** — turn the zone switch off, call `garden_irrigation.stop`,
   or `garden_irrigation.stop_all`. Stopping a chained zone stops the whole chain.
 - **Pre / post scripts** — run and await a `script` entity before the valve opens

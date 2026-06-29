@@ -25,6 +25,48 @@ CONF_PRE_SCRIPT = "pre_script"
 CONF_POST_SCRIPT = "post_script"
 CONF_ENABLED = "enabled"  # soft enable/disable for a setup or a zone
 
+# Cycle & soak (per zone) — split a run into N bursts with soak gaps
+CONF_CYCLES = "cycles"  # number of on-cycles per run (1 = continuous)
+CONF_SOAK = "soak"  # soak minutes between cycles
+DEFAULT_CYCLES = 1
+DEFAULT_SOAK = 0
+MAX_CYCLES = 6
+MAX_SOAK = 60
+
+# Seasonal adjustment (per setup) — scales every zone's duration
+CONF_SEASONAL_ADJUST = "seasonal_adjust"  # percent (100 = no change)
+DEFAULT_SEASONAL_ADJUST = 100
+MIN_SEASONAL_ADJUST = 0
+MAX_SEASONAL_ADJUST = 200
+
+# Master valve / pump (per setup) — opens while any zone in the setup runs
+CONF_MASTER_ENTITY = "master_entity"  # switch / valve / input_boolean
+CONF_MASTER_LEAD = "master_lead"  # seconds to wait after opening before a zone
+DEFAULT_MASTER_LEAD = 0
+MAX_MASTER_LEAD = 120
+
+# Freeze skip (per setup; scheduled runs only)
+CONF_FREEZE_ENABLED = "freeze_enabled"
+CONF_FREEZE_ENTITY = "freeze_entity"  # temperature sensor / weather
+CONF_FREEZE_THRESHOLD = "freeze_threshold"  # skip if at/below this temperature
+DEFAULT_FREEZE_THRESHOLD = 2.0
+
+# Soil-moisture skip (per setup; scheduled runs only)
+CONF_SOIL_ENABLED = "soil_enabled"
+CONF_SOIL_ENTITY = "soil_entity"  # moisture sensor (%)
+CONF_SOIL_THRESHOLD = "soil_threshold"  # skip if at/above this moisture
+DEFAULT_SOIL_THRESHOLD = 40.0
+
+# Flow / leak monitoring (per setup)
+CONF_FLOW_ENABLED = "flow_enabled"
+CONF_FLOW_ENTITY = "flow_entity"  # flow-rate sensor
+CONF_FLOW_MIN = "flow_min"  # expected minimum flow while a zone runs
+DEFAULT_FLOW_MIN = 0.5
+CONF_NOTIFY_FLOW = "notify_flow"  # notify on a flow anomaly (no-flow / leak)
+
+# Manual rain delay (pause all watering until a timestamp); stored in state Store
+STATE_RAIN_DELAY_UNTIL = "rain_delay_until"
+
 # Notifications (per setup)
 CONF_NOTIFY_ENABLED = "notify_enabled"  # legacy (migrated)
 CONF_NOTIFY_TARGET = "notify_target"  # legacy single target (migrated)
@@ -50,6 +92,9 @@ DEFAULT_FORECAST_THRESHOLD = 60
 
 SKIP_RECENT = "rain_recent"
 SKIP_FORECAST = "rain_forecast"
+SKIP_FREEZE = "freeze"
+SKIP_SOIL = "soil_wet"
+SKIP_RAIN_DELAY = "rain_delay"
 EVENT_SKIPPED = f"{DOMAIN}_skipped"
 
 # Scheduling modes

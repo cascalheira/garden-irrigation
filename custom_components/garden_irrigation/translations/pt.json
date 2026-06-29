@@ -55,13 +55,31 @@
           "forecast_entity": "Entidade meteorológica de previsão",
           "forecast_hours": "Previsão — período seguinte (horas)",
           "forecast_threshold": "Previsão — limite de probabilidade de chuva (%)",
+          "seasonal_adjust": "Ajuste sazonal (% da duração de cada zona)",
+          "master_entity": "Válvula principal / bomba (opcional)",
+          "master_lead": "Tempo de avanço da válvula principal (segundos)",
+          "freeze_enabled": "Ignorar se gelar",
+          "freeze_entity": "Entidade de temperatura (sensor / meteorologia)",
+          "freeze_threshold": "Gelo — ignorar a/abaixo de (°)",
+          "soil_enabled": "Ignorar se o solo estiver húmido",
+          "soil_entity": "Sensor de humidade do solo",
+          "soil_threshold": "Solo — ignorar a/acima de (%)",
+          "flow_enabled": "Monitorização de caudal / fugas",
+          "flow_entity": "Sensor de caudal",
+          "flow_min": "Caudal mínimo esperado durante a rega",
           "notify_off_failed": "Notificar: válvula não fecha (crítico)",
           "notify_start_failed": "Notificar: zona falha ao iniciar",
-          "notify_skip": "Notificar: rega ignorada (chuva)"
+          "notify_skip": "Notificar: rega ignorada (chuva)",
+          "notify_flow": "Notificar: anomalia de caudal (sem caudal / fuga, crítico)"
         },
         "data_description": {
           "rain_entity": "Ignora uma execução agendada se isto indicar chuva no período anterior. Uma entidade meteorológica usa a sua precipitação atual; um sensor binário conta qualquer 'on'.",
           "forecast_entity": "Ignora uma execução agendada se esta entidade meteorológica previr chuva acima do limite de probabilidade no período seguinte.",
+          "seasonal_adjust": "Escala o tempo de rega de todas as zonas. 100% = sem alteração; 50% reduz para metade, 150% aumenta em metade.",
+          "master_entity": "Uma válvula ou bomba principal aberta enquanto qualquer zona deste conjunto rega (e fechada no fim). Deixe vazio se não usar.",
+          "freeze_entity": "Ignora uma execução agendada quando esta temperatura estiver a/abaixo do limite (proteção contra gelo).",
+          "soil_entity": "Ignora uma execução agendada quando esta leitura de humidade estiver a/acima do limite.",
+          "flow_entity": "Avisa se uma zona regar sem caudal (válvula presa) ou se houver caudal em repouso (fuga). As notificações são enviadas se a notificação de caudal estiver ativa.",
           "notify_off_failed": "Os destinos das notificações são escolhidos no cartão do painel (separador Notificações)."
         }
       },
@@ -98,12 +116,16 @@
             "name": "Nome da zona",
             "switch_entity": "Interruptor / relé",
             "duration": "Duração da rega (minutos)",
+            "cycles": "Ciclos (dividir a rega em períodos)",
+            "soak": "Absorção entre ciclos (minutos)",
             "pre_script": "Script de pré-rega (opcional)",
             "post_script": "Script de pós-rega (opcional)"
           },
           "data_description": {
             "switch_entity": "O interruptor ou input_boolean que abre a válvula desta zona.",
             "duration": "Durante quanto tempo a zona rega em cada execução (1-60 minutos).",
+            "cycles": "Divide o tempo de rega neste número de períodos para reduzir o escoamento (1 = contínuo).",
+            "soak": "Tempo em que a válvula fica fechada entre ciclos para a água ser absorvida.",
             "pre_script": "Script executado e aguardado antes de a válvula abrir (por ex. abrir a alimentação principal).",
             "post_script": "Script executado e aguardado depois de a válvula fechar (por ex. notificar, fechar a alimentação)."
           }
@@ -161,6 +183,9 @@
     "sensor": {
       "remaining": {
         "name": "Tempo restante"
+      },
+      "total": {
+        "name": "Tempo total de rega"
       }
     }
   },

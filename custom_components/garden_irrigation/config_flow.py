@@ -23,14 +23,24 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_CYCLES,
     CONF_DAYS,
     CONF_DURATION,
+    CONF_FLOW_ENABLED,
+    CONF_FLOW_ENTITY,
+    CONF_FLOW_MIN,
     CONF_FORECAST_ENABLED,
     CONF_FORECAST_ENTITY,
     CONF_FORECAST_HOURS,
     CONF_FORECAST_THRESHOLD,
+    CONF_FREEZE_ENABLED,
+    CONF_FREEZE_ENTITY,
+    CONF_FREEZE_THRESHOLD,
+    CONF_MASTER_ENTITY,
+    CONF_MASTER_LEAD,
     CONF_MODE,
     CONF_NAME,
+    CONF_NOTIFY_FLOW,
     CONF_NOTIFY_OFF_FAILED,
     CONF_NOTIFY_SKIP,
     CONF_NOTIFY_START_FAILED,
@@ -43,20 +53,37 @@ from .const import (
     CONF_RAIN_HOURS,
     CONF_RAIN_THRESHOLD,
     CONF_SCHEDULES,
+    CONF_SEASONAL_ADJUST,
+    CONF_SOAK,
+    CONF_SOIL_ENABLED,
+    CONF_SOIL_ENTITY,
+    CONF_SOIL_THRESHOLD,
     CONF_START_TIME,
     CONF_START_TIMES,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
+    DEFAULT_CYCLES,
     DEFAULT_DURATION,
+    DEFAULT_FLOW_MIN,
     DEFAULT_FORECAST_HOURS,
     DEFAULT_FORECAST_THRESHOLD,
+    DEFAULT_FREEZE_THRESHOLD,
+    DEFAULT_MASTER_LEAD,
     DEFAULT_MODE,
     DEFAULT_RAIN_HOURS,
     DEFAULT_RAIN_THRESHOLD,
+    DEFAULT_SEASONAL_ADJUST,
+    DEFAULT_SOAK,
+    DEFAULT_SOIL_THRESHOLD,
     DEFAULT_START_TIME,
     DOMAIN,
+    MAX_CYCLES,
     MAX_DURATION,
+    MAX_MASTER_LEAD,
+    MAX_SEASONAL_ADJUST,
+    MAX_SOAK,
     MIN_DURATION,
+    MIN_SEASONAL_ADJUST,
     MODE_SEQUENTIAL,
     MODE_SPECIFIC,
     MODES,
@@ -125,6 +152,65 @@ PERCENT_SELECTOR = selector.NumberSelector(
     )
 )
 
+SEASONAL_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=MIN_SEASONAL_ADJUST,
+        max=MAX_SEASONAL_ADJUST,
+        step=5,
+        unit_of_measurement="%",
+        mode=selector.NumberSelectorMode.SLIDER,
+    )
+)
+
+MASTER_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain=["switch", "valve", "input_boolean"])
+)
+
+SECONDS_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=0, max=MAX_MASTER_LEAD, step=1, unit_of_measurement="s",
+        mode=selector.NumberSelectorMode.BOX,
+    )
+)
+
+TEMP_ENTITY_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain=["sensor", "weather"])
+)
+
+TEMP_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=-20, max=50, step=0.5, unit_of_measurement="°",
+        mode=selector.NumberSelectorMode.BOX,
+    )
+)
+
+SOIL_ENTITY_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="sensor")
+)
+
+FLOW_ENTITY_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="sensor")
+)
+
+FLOW_MIN_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=0, max=1000, step=0.1, mode=selector.NumberSelectorMode.BOX
+    )
+)
+
+CYCLES_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=1, max=MAX_CYCLES, step=1, mode=selector.NumberSelectorMode.BOX
+    )
+)
+
+SOAK_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=0, max=MAX_SOAK, step=1, unit_of_measurement="min",
+        mode=selector.NumberSelectorMode.BOX,
+    )
+)
+
 
 def _settings_schema() -> vol.Schema:
     return vol.Schema(
@@ -134,6 +220,8 @@ def _settings_schema() -> vol.Schema:
                 selector.EntitySelectorConfig(domain=["switch", "input_boolean"])
             ),
             vol.Required(CONF_DURATION, default=DEFAULT_DURATION): DURATION_SELECTOR,
+            vol.Optional(CONF_CYCLES, default=DEFAULT_CYCLES): CYCLES_SELECTOR,
+            vol.Optional(CONF_SOAK, default=DEFAULT_SOAK): SOAK_SELECTOR,
             vol.Optional(CONF_PRE_SCRIPT): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="script")
             ),
@@ -286,6 +374,10 @@ class OptionsFlowHandler(OptionsFlow):
                 CONF_POST_SCRIPT,
                 CONF_RAIN_ENTITY,
                 CONF_FORECAST_ENTITY,
+                CONF_MASTER_ENTITY,
+                CONF_FREEZE_ENTITY,
+                CONF_SOIL_ENTITY,
+                CONF_FLOW_ENTITY,
             ):
                 if user_input.get(key):
                     self._opts[key] = user_input[key]
@@ -296,15 +388,24 @@ class OptionsFlowHandler(OptionsFlow):
                 CONF_RAIN_THRESHOLD,
                 CONF_FORECAST_HOURS,
                 CONF_FORECAST_THRESHOLD,
+                CONF_SEASONAL_ADJUST,
+                CONF_MASTER_LEAD,
+                CONF_FREEZE_THRESHOLD,
+                CONF_SOIL_THRESHOLD,
+                CONF_FLOW_MIN,
             ):
                 if user_input.get(key) is not None:
                     self._opts[key] = user_input[key]
             for key in (CONF_RAIN_ENABLED, CONF_FORECAST_ENABLED):
                 self._opts[key] = bool(user_input.get(key, True))
             for key in (
+                CONF_FREEZE_ENABLED,
+                CONF_SOIL_ENABLED,
+                CONF_FLOW_ENABLED,
                 CONF_NOTIFY_OFF_FAILED,
                 CONF_NOTIFY_START_FAILED,
                 CONF_NOTIFY_SKIP,
+                CONF_NOTIFY_FLOW,
             ):
                 self._opts[key] = bool(user_input.get(key, False))
             if user_input[CONF_MODE] != MODE_SEQUENTIAL:
@@ -347,6 +448,46 @@ class OptionsFlowHandler(OptionsFlow):
                     ),
                 ): PERCENT_SELECTOR,
                 vol.Optional(
+                    CONF_SEASONAL_ADJUST,
+                    default=self._opts.get(
+                        CONF_SEASONAL_ADJUST, DEFAULT_SEASONAL_ADJUST
+                    ),
+                ): SEASONAL_SELECTOR,
+                vol.Optional(CONF_MASTER_ENTITY): MASTER_SELECTOR,
+                vol.Optional(
+                    CONF_MASTER_LEAD,
+                    default=self._opts.get(CONF_MASTER_LEAD, DEFAULT_MASTER_LEAD),
+                ): SECONDS_SELECTOR,
+                vol.Optional(
+                    CONF_FREEZE_ENABLED,
+                    default=self._opts.get(CONF_FREEZE_ENABLED, False),
+                ): selector.BooleanSelector(),
+                vol.Optional(CONF_FREEZE_ENTITY): TEMP_ENTITY_SELECTOR,
+                vol.Optional(
+                    CONF_FREEZE_THRESHOLD,
+                    default=self._opts.get(
+                        CONF_FREEZE_THRESHOLD, DEFAULT_FREEZE_THRESHOLD
+                    ),
+                ): TEMP_SELECTOR,
+                vol.Optional(
+                    CONF_SOIL_ENABLED,
+                    default=self._opts.get(CONF_SOIL_ENABLED, False),
+                ): selector.BooleanSelector(),
+                vol.Optional(CONF_SOIL_ENTITY): SOIL_ENTITY_SELECTOR,
+                vol.Optional(
+                    CONF_SOIL_THRESHOLD,
+                    default=self._opts.get(CONF_SOIL_THRESHOLD, DEFAULT_SOIL_THRESHOLD),
+                ): PERCENT_SELECTOR,
+                vol.Optional(
+                    CONF_FLOW_ENABLED,
+                    default=self._opts.get(CONF_FLOW_ENABLED, False),
+                ): selector.BooleanSelector(),
+                vol.Optional(CONF_FLOW_ENTITY): FLOW_ENTITY_SELECTOR,
+                vol.Optional(
+                    CONF_FLOW_MIN,
+                    default=self._opts.get(CONF_FLOW_MIN, DEFAULT_FLOW_MIN),
+                ): FLOW_MIN_SELECTOR,
+                vol.Optional(
                     CONF_NOTIFY_OFF_FAILED,
                     default=self._opts.get(CONF_NOTIFY_OFF_FAILED, True),
                 ): selector.BooleanSelector(),
@@ -357,6 +498,10 @@ class OptionsFlowHandler(OptionsFlow):
                 vol.Optional(
                     CONF_NOTIFY_SKIP,
                     default=self._opts.get(CONF_NOTIFY_SKIP, False),
+                ): selector.BooleanSelector(),
+                vol.Optional(
+                    CONF_NOTIFY_FLOW,
+                    default=self._opts.get(CONF_NOTIFY_FLOW, False),
                 ): selector.BooleanSelector(),
             }
         )
@@ -430,7 +575,7 @@ class OptionsFlowHandler(OptionsFlow):
             for key in (CONF_PRE_SCRIPT, CONF_POST_SCRIPT):
                 if self._opts.get(key):
                     new_options[key] = self._opts[key]
-        # Rain skip applies to both modes.
+        # Rain skip and the other watering options apply to both modes.
         for key in (
             CONF_RAIN_ENABLED,
             CONF_RAIN_ENTITY,
@@ -440,10 +585,23 @@ class OptionsFlowHandler(OptionsFlow):
             CONF_FORECAST_ENTITY,
             CONF_FORECAST_HOURS,
             CONF_FORECAST_THRESHOLD,
+            CONF_SEASONAL_ADJUST,
+            CONF_MASTER_ENTITY,
+            CONF_MASTER_LEAD,
+            CONF_FREEZE_ENABLED,
+            CONF_FREEZE_ENTITY,
+            CONF_FREEZE_THRESHOLD,
+            CONF_SOIL_ENABLED,
+            CONF_SOIL_ENTITY,
+            CONF_SOIL_THRESHOLD,
+            CONF_FLOW_ENABLED,
+            CONF_FLOW_ENTITY,
+            CONF_FLOW_MIN,
             CONF_NOTIFY_TARGETS,
             CONF_NOTIFY_OFF_FAILED,
             CONF_NOTIFY_START_FAILED,
             CONF_NOTIFY_SKIP,
+            CONF_NOTIFY_FLOW,
         ):
             if self._opts.get(key) not in (None, ""):
                 new_options[key] = self._opts[key]

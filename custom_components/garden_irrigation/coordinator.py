@@ -23,20 +23,34 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_state_change_event,
+    async_track_time_change,
+)
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_CYCLES,
     CONF_DAYS,
     CONF_DURATION,
     CONF_ENABLED,
+    CONF_FLOW_ENABLED,
+    CONF_FLOW_ENTITY,
+    CONF_FLOW_MIN,
     CONF_FORECAST_ENABLED,
     CONF_FORECAST_ENTITY,
     CONF_FORECAST_HOURS,
     CONF_FORECAST_THRESHOLD,
+    CONF_FREEZE_ENABLED,
+    CONF_FREEZE_ENTITY,
+    CONF_FREEZE_THRESHOLD,
+    CONF_MASTER_ENTITY,
+    CONF_MASTER_LEAD,
     CONF_MODE,
     CONF_NAME,
+    CONF_NOTIFY_FLOW,
     CONF_NOTIFY_OFF_FAILED,
     CONF_NOTIFY_SKIP,
     CONF_NOTIFY_START_FAILED,
@@ -49,16 +63,28 @@ from .const import (
     CONF_RAIN_HOURS,
     CONF_RAIN_THRESHOLD,
     CONF_SCHEDULES,
+    CONF_SEASONAL_ADJUST,
+    CONF_SOAK,
+    CONF_SOIL_ENABLED,
+    CONF_SOIL_ENTITY,
+    CONF_SOIL_THRESHOLD,
     CONF_START_TIME,
     CONF_START_TIMES,
     CONF_SWITCH_ENTITY,
     CONF_TIME,
+    DEFAULT_CYCLES,
     DEFAULT_DURATION,
+    DEFAULT_FLOW_MIN,
     DEFAULT_FORECAST_HOURS,
     DEFAULT_FORECAST_THRESHOLD,
+    DEFAULT_FREEZE_THRESHOLD,
+    DEFAULT_MASTER_LEAD,
     DEFAULT_MODE,
     DEFAULT_RAIN_HOURS,
     DEFAULT_RAIN_THRESHOLD,
+    DEFAULT_SEASONAL_ADJUST,
+    DEFAULT_SOAK,
+    DEFAULT_SOIL_THRESHOLD,
     DOMAIN,
     EVENT_SKIPPED,
     ISSUE_COLLISION,
@@ -66,7 +92,11 @@ from .const import (
     MODE_SEQUENTIAL,
     SIGNAL_UPDATE,
     SKIP_FORECAST,
+    SKIP_FREEZE,
+    SKIP_RAIN_DELAY,
     SKIP_RECENT,
+    SKIP_SOIL,
+    STATE_RAIN_DELAY_UNTIL,
     SUBENTRY_TYPE_ZONE,
     WEEKDAYS,
 )
@@ -89,6 +119,14 @@ HISTORY_VERSION = 1
 MAX_HISTORY = 1000
 MAX_HISTORY_DAYS = 365
 
+# Persisted runtime state (rain delay) and per-zone totals
+STATE_VERSION = 1
+TOTALS_VERSION = 1
+
+# Flow / leak monitoring
+FLOW_SETTLE = 30.0  # seconds after a valve opens before checking for flow
+FLOW_LEAK_SECONDS = 120.0  # sustained idle flow before a leak is reported
+
 
 @dataclass
 class Zone:
@@ -102,6 +140,8 @@ class Zone:
     pre_script: str | None = None
     post_script: str | None = None
     enabled: bool = True
+    cycles: int = 1  # number of on-cycles per run (1 = continuous)
+    soak: int = 0  # soak minutes between cycles
 
 
 @dataclass
@@ -124,6 +164,8 @@ def zone_from_subentry(subentry_id: str, data: dict[str, Any]) -> Zone:
         pre_script=data.get(CONF_PRE_SCRIPT) or None,
         post_script=data.get(CONF_POST_SCRIPT) or None,
         enabled=data.get(CONF_ENABLED, True),
+        cycles=max(1, int(data.get(CONF_CYCLES, DEFAULT_CYCLES) or DEFAULT_CYCLES)),
+        soak=max(0, int(data.get(CONF_SOAK, DEFAULT_SOAK) or DEFAULT_SOAK)),
     )
 
 
@@ -141,6 +183,21 @@ class IrrigationController:
         self._store: Store = Store(
             hass, HISTORY_VERSION, f"{DOMAIN}_history_{entry.entry_id}"
         )
+        # Master valve refcount: open while any zone is watering.
+        self._master_lock = asyncio.Lock()
+        self._master_users: set[str] = set()
+        # Manual rain delay + per-zone cumulative totals (persisted).
+        self._state_store: Store = Store(
+            hass, STATE_VERSION, f"{DOMAIN}_state_{entry.entry_id}"
+        )
+        self._totals_store: Store = Store(
+            hass, TOTALS_VERSION, f"{DOMAIN}_totals_{entry.entry_id}"
+        )
+        self._rain_delay_until: datetime | None = None
+        self._totals: dict[str, float] = {}
+        # Idle flow leak watchdog.
+        self._unsub_flow: Callable[[], None] | None = None
+        self._leak_timer: Callable[[], None] | None = None
 
     # ----- configuration helpers -------------------------------------------------
 
@@ -148,6 +205,43 @@ class IrrigationController:
     def enabled(self) -> bool:
         """Whether the setup is enabled (False = paused, no watering)."""
         return self.entry.options.get(CONF_ENABLED, True)
+
+    @property
+    def seasonal_adjust(self) -> int:
+        """Percent applied to every zone's duration (100 = no change)."""
+        return int(self.entry.options.get(CONF_SEASONAL_ADJUST, DEFAULT_SEASONAL_ADJUST))
+
+    def effective_minutes(self, zone: Zone) -> int:
+        """Zone duration after the seasonal adjustment (at least 1 minute)."""
+        pct = self.seasonal_adjust
+        if pct == 100:
+            return zone.duration
+        return max(1, round(zone.duration * pct / 100))
+
+    @property
+    def master_entity(self) -> str | None:
+        """Optional master valve/pump opened while any zone in this setup runs."""
+        return self.entry.options.get(CONF_MASTER_ENTITY) or None
+
+    @property
+    def master_lead(self) -> int:
+        """Seconds to wait after opening the master valve before a zone opens."""
+        return int(self.entry.options.get(CONF_MASTER_LEAD, DEFAULT_MASTER_LEAD) or 0)
+
+    @property
+    def flow_enabled(self) -> bool:
+        return bool(
+            self.entry.options.get(CONF_FLOW_ENABLED, False)
+            and self.entry.options.get(CONF_FLOW_ENTITY)
+        )
+
+    @property
+    def flow_entity(self) -> str | None:
+        return self.entry.options.get(CONF_FLOW_ENTITY) or None
+
+    @property
+    def flow_min(self) -> float:
+        return float(self.entry.options.get(CONF_FLOW_MIN, DEFAULT_FLOW_MIN))
 
     @property
     def mode(self) -> str:
@@ -206,7 +300,13 @@ class IrrigationController:
     async def async_setup(self) -> None:
         """Register schedule listeners and refresh derived state."""
         self._history = self._prune_history(await self._store.async_load() or [])
+        state = await self._state_store.async_load() or {}
+        raw = state.get(STATE_RAIN_DELAY_UNTIL)
+        self._rain_delay_until = dt_util.parse_datetime(raw) if raw else None
+        totals = await self._totals_store.async_load() or {}
+        self._totals = {k: float(v) for k, v in totals.items()}
         self._register_schedules()
+        self._register_flow_listener()
         self._update_overlap_issue()
 
     async def async_shutdown(self) -> None:
@@ -214,6 +314,10 @@ class IrrigationController:
         for unsub in self._unsub_time:
             unsub()
         self._unsub_time.clear()
+        if self._unsub_flow:
+            self._unsub_flow()
+            self._unsub_flow = None
+        self._cancel_leak_timer()
 
         tasks = [s.task for s in self._running.values()]
         if self._chain_task:
@@ -225,8 +329,9 @@ class IrrigationController:
                 await task
         self._running.clear()
         self._chain_task = None
-        # Persist any pending history before the controller is replaced (reload).
+        # Persist any pending history/totals before the controller is replaced.
         await self._store.async_save(self._history)
+        await self._totals_store.async_save(self._totals)
 
     @callback
     def _register_schedules(self) -> None:
@@ -321,7 +426,8 @@ class IrrigationController:
         if zone_id in self._running:
             return  # already watering
 
-        minutes = duration if duration is not None else zone.duration
+        # An explicit override runs as-is; the default applies seasonal adjust.
+        minutes = duration if duration is not None else self.effective_minutes(zone)
         self.hass.async_create_task(
             self._run_single(zone, int(minutes) * 60, source),
             name=f"{DOMAIN}_{zone_id}",
@@ -403,13 +509,19 @@ class IrrigationController:
         try:
             if self.pre_script:
                 await self._run_script(self.pre_script)
+            # Hold one master-valve lease for the whole sequence so it stays
+            # open (and only adds its lead once) across all the zones.
+            await self._acquire_master("chain")
             for zone in self.zones.values():
                 if not zone.enabled:
                     continue
-                await self._water(zone, zone.duration * 60, "scheduled")
+                await self._water(
+                    zone, self.effective_minutes(zone) * 60, "scheduled"
+                )
         except asyncio.CancelledError:
             _LOGGER.debug("Chain for %s stopped early", self.entry.title)
         finally:
+            await asyncio.shield(self._release_master("chain"))
             if self.post_script:
                 await asyncio.shield(self._run_script(self.post_script))
 
@@ -420,27 +532,43 @@ class IrrigationController:
             pass
 
     async def _water(self, zone: Zone, seconds: int, source: str) -> None:
-        """Water one zone: pre-script, switch on, wait, switch off, post-script.
+        """Water one zone: pre-script, master valve, on/soak cycles, off, post.
 
         Runs in the calling task (the chain task or a single-run task) so that
         cancelling that task stops watering. Cleanup is shielded so the valve is
-        always closed even on cancellation.
+        always closed even on cancellation. ``seconds`` is the total *watering*
+        time, split across ``zone.cycles`` bursts with ``zone.soak`` gaps.
         """
+        cycles = max(1, zone.cycles)
+        soak = max(0, zone.soak) * 60
+        on_each = max(1, seconds // cycles)
+        wall = on_each * cycles + soak * (cycles - 1)
+
         task = asyncio.current_task()
         self._running[zone.id] = RunState(
             task=task,
-            ends_at=dt_util.utcnow() + timedelta(seconds=seconds),
+            ends_at=dt_util.utcnow() + timedelta(seconds=wall),
             source=source,
         )
         self._notify()
-        self._log("start", zone=zone.name, source=source, minutes=zone.duration)
+        self._log(
+            "start", zone=zone.name, source=source, minutes=round(seconds / 60)
+        )
         stopped = False
         failed = False
+        watered = 0
         try:
             if zone.pre_script:
                 await self._run_script(zone.pre_script)
-            await self._set_switch(zone.switch_entity, True)
-            await asyncio.sleep(seconds)
+            await self._acquire_master(zone.id)
+            for index in range(cycles):
+                await self._set_switch(zone.switch_entity, True)
+                self.hass.async_create_task(self._flow_watchdog(zone))
+                await asyncio.sleep(on_each)
+                watered += on_each
+                if soak and index < cycles - 1:
+                    await self._set_switch(zone.switch_entity, False)
+                    await asyncio.sleep(soak)
         except asyncio.CancelledError:
             stopped = True
             raise
@@ -448,16 +576,21 @@ class IrrigationController:
             failed = True
             _LOGGER.error("Zone %s failed to run: %s", zone.name, err)
         finally:
-            await asyncio.shield(self._cleanup(zone, stopped, failed))
+            await asyncio.shield(self._cleanup(zone, stopped, failed, watered))
 
-    async def _cleanup(self, zone: Zone, stopped: bool, failed: bool) -> None:
+    async def _cleanup(
+        self, zone: Zone, stopped: bool, failed: bool, watered_seconds: int = 0
+    ) -> None:
         try:
             closed = await self._async_ensure_off(zone.switch_entity)
+            await self._release_master(zone.id)
             if zone.post_script:
                 await self._run_script(zone.post_script)
         finally:
             self._running.pop(zone.id, None)
             self._notify()
+        if watered_seconds > 0:
+            self._add_total(zone.id, watered_seconds / 60.0)
         if not closed:
             self._log("error", zone=zone.name, detail="off_failed", level="error")
             await self._notify_failure(zone.name, "off_failed")
@@ -468,6 +601,114 @@ class IrrigationController:
             self._log("stop", zone=zone.name)
         else:
             self._log("finish", zone=zone.name)
+
+    # ----- master valve / pump ---------------------------------------------------
+
+    async def _acquire_master(self, key: str) -> None:
+        """Open the master valve when the first user acquires it (with lead)."""
+        entity = self.master_entity
+        async with self._master_lock:
+            first = not self._master_users
+            self._master_users.add(key)
+            if entity and first:
+                try:
+                    await self._set_switch(entity, True)
+                    if self.master_lead:
+                        await asyncio.sleep(self.master_lead)
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning("Could not open master valve %s: %s", entity, err)
+
+    async def _release_master(self, key: str) -> None:
+        """Close the master valve when the last user releases it."""
+        entity = self.master_entity
+        async with self._master_lock:
+            self._master_users.discard(key)
+            if entity and not self._master_users:
+                await self._async_ensure_off(entity)
+
+    # ----- flow / leak monitoring ------------------------------------------------
+
+    async def _flow_watchdog(self, zone: Zone) -> None:
+        """A short while after a valve opens, warn if no flow is detected."""
+        if not self.flow_enabled:
+            return
+        await asyncio.sleep(FLOW_SETTLE)
+        if zone.id not in self._running:
+            return
+        state = self.hass.states.get(zone.switch_entity)
+        if state is not None and state.state != "on":
+            return  # valve is in a soak gap, not actually open
+        value = self._num_state(self.flow_entity)
+        if value is not None and value < self.flow_min:
+            self._log("flow", zone=zone.name, detail="no_flow", level="warning")
+            await self._notify_flow(
+                f"⚠️ {self.entry.title}: no flow detected at zone “{zone.name}” — "
+                "the valve may be stuck closed."
+            )
+
+    @callback
+    def _register_flow_listener(self) -> None:
+        """Watch the flow sensor for sustained flow while everything is idle."""
+        if self._unsub_flow:
+            self._unsub_flow()
+            self._unsub_flow = None
+        if not self.flow_enabled:
+            return
+        self._unsub_flow = async_track_state_change_event(
+            self.hass, [self.flow_entity], self._on_flow_change
+        )
+
+    @callback
+    def _on_flow_change(self, event: Any) -> None:
+        if not self.flow_enabled:
+            return
+        if self._running or self._master_users:
+            self._cancel_leak_timer()
+            return
+        new_state = event.data.get("new_state")
+        value = self._num_state(self.flow_entity) if new_state else None
+        if value is not None and value > self.flow_min:
+            if self._leak_timer is None:
+                self._leak_timer = async_call_later(
+                    self.hass, FLOW_LEAK_SECONDS, self._leak_fire
+                )
+        else:
+            self._cancel_leak_timer()
+
+    @callback
+    def _cancel_leak_timer(self) -> None:
+        if self._leak_timer is not None:
+            self._leak_timer()
+            self._leak_timer = None
+
+    async def _leak_fire(self, _now: Any) -> None:
+        self._leak_timer = None
+        if self._running or self._master_users:
+            return
+        value = self._num_state(self.flow_entity)
+        if value is not None and value > self.flow_min:
+            self._log("flow", detail="leak", level="warning")
+            await self._notify_flow(
+                f"⚠️ {self.entry.title}: water is flowing while idle "
+                f"({value}) — possible leak or stuck valve."
+            )
+
+    async def _notify_flow(self, message: str) -> None:
+        targets = self.notify_targets
+        if not targets or not self.entry.options.get(CONF_NOTIFY_FLOW, False):
+            return
+        await self._send_notification(targets, message, critical=True)
+
+    def _num_state(self, entity_id: str | None) -> float | None:
+        if not entity_id:
+            return None
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in ("unknown", "unavailable", "", None):
+            return None
+        try:
+            return float(state.state)
+        except (ValueError, TypeError):
+            return None
 
     @property
     def notify_targets(self) -> list[str]:
@@ -677,10 +918,98 @@ class IrrigationController:
 
     async def async_skip_reason(self) -> str | None:
         """Return a skip reason (SKIP_*) if a scheduled run should be skipped now."""
+        if self.rain_delay_active:
+            return SKIP_RAIN_DELAY
         if await self._recent_rain():
             return SKIP_RECENT
         if await self._rain_forecast():
             return SKIP_FORECAST
+        if self._freezing():
+            return SKIP_FREEZE
+        if self._soil_wet():
+            return SKIP_SOIL
+        return None
+
+    def _freezing(self) -> bool:
+        """True if the freeze entity is at/below the configured threshold."""
+        if not self.entry.options.get(CONF_FREEZE_ENABLED, False):
+            return False
+        entity_id = self.entry.options.get(CONF_FREEZE_ENTITY)
+        if not entity_id:
+            return False
+        threshold = float(
+            self.entry.options.get(CONF_FREEZE_THRESHOLD, DEFAULT_FREEZE_THRESHOLD)
+        )
+        value = self._temp_value(entity_id)
+        return value is not None and value <= threshold
+
+    def _temp_value(self, entity_id: str) -> float | None:
+        """Read a temperature from a sensor (state) or weather (attribute)."""
+        if entity_id.split(".", 1)[0] == "weather":
+            state = self.hass.states.get(entity_id)
+            try:
+                val = state.attributes.get("temperature") if state else None
+                return float(val) if val is not None else None
+            except (ValueError, TypeError, AttributeError):
+                return None
+        return self._num_state(entity_id)
+
+    def _soil_wet(self) -> bool:
+        """True if the soil-moisture entity is at/above the configured threshold."""
+        if not self.entry.options.get(CONF_SOIL_ENABLED, False):
+            return False
+        entity_id = self.entry.options.get(CONF_SOIL_ENTITY)
+        if not entity_id:
+            return False
+        threshold = float(
+            self.entry.options.get(CONF_SOIL_THRESHOLD, DEFAULT_SOIL_THRESHOLD)
+        )
+        value = self._num_state(entity_id)
+        return value is not None and value >= threshold
+
+    # ----- manual rain delay -----------------------------------------------------
+
+    @property
+    def rain_delay_until(self) -> datetime | None:
+        return self._rain_delay_until
+
+    @property
+    def rain_delay_active(self) -> bool:
+        return bool(
+            self._rain_delay_until and self._rain_delay_until > dt_util.utcnow()
+        )
+
+    async def async_set_rain_delay(self, hours: float) -> None:
+        """Pause all watering for ``hours`` from now."""
+        self._rain_delay_until = dt_util.utcnow() + timedelta(hours=hours)
+        await self._state_store.async_save(
+            {STATE_RAIN_DELAY_UNTIL: self._rain_delay_until.isoformat()}
+        )
+        self._notify()
+
+    async def async_clear_rain_delay(self) -> None:
+        """Resume scheduled watering."""
+        self._rain_delay_until = None
+        await self._state_store.async_save({})
+        self._notify()
+
+    # ----- per-zone cumulative totals --------------------------------------------
+
+    def total_minutes(self, zone_id: str) -> float:
+        """Total minutes this zone has ever watered (monotonic)."""
+        return round(self._totals.get(zone_id, 0.0), 1)
+
+    @callback
+    def _add_total(self, zone_id: str, minutes: float) -> None:
+        self._totals[zone_id] = self._totals.get(zone_id, 0.0) + minutes
+        self._totals_store.async_delay_save(lambda: self._totals, 10)
+        self._notify()
+
+    def last_watered(self, zone_name: str) -> str | None:
+        """ISO timestamp of the most recent completed/stopped run for a zone."""
+        for ev in reversed(self._history):
+            if ev.get("zone") == zone_name and ev.get("type") in ("finish", "stop"):
+                return ev.get("ts")
         return None
 
     async def _recent_rain(self) -> bool:
@@ -787,7 +1116,13 @@ class IrrigationController:
             "Skipping scheduled irrigation for %s (%s)", self.entry.title, reason
         )
         if self.notify_targets and self.entry.options.get(CONF_NOTIFY_SKIP, False):
-            label = "rain forecast" if reason == SKIP_FORECAST else "recent rain"
+            label = {
+                SKIP_FORECAST: "rain forecast",
+                SKIP_RECENT: "recent rain",
+                SKIP_FREEZE: "freezing temperature",
+                SKIP_SOIL: "soil already moist",
+                SKIP_RAIN_DELAY: "rain delay active",
+            }.get(reason, reason)
             self.hass.async_create_task(
                 self._send_notification(
                     self.notify_targets,

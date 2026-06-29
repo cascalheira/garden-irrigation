@@ -32,7 +32,10 @@ async def async_setup_entry(
         if subentry.subentry_type != SUBENTRY_TYPE_ZONE:
             continue
         async_add_entities(
-            [ZoneRemainingSensor(controller, subentry_id)],
+            [
+                ZoneRemainingSensor(controller, subentry_id),
+                ZoneTotalSensor(controller, subentry_id),
+            ],
             config_subentry_id=subentry_id,
         )
 
@@ -64,6 +67,44 @@ class ZoneRemainingSensor(SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         next_run = self._controller.next_run(self._zone_id)
         return {"next_run": next_run.isoformat() if next_run else None}
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{SIGNAL_UPDATE}_{self._controller.entry.entry_id}",
+                self._handle_update,
+            )
+        )
+
+    @callback
+    def _handle_update(self) -> None:
+        self.async_write_ha_state()
+
+
+class ZoneTotalSensor(SensorEntity):
+    """Cumulative minutes a zone has watered (for long-term statistics)."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "total"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, controller: IrrigationController, subentry_id: str) -> None:
+        self._controller = controller
+        self._zone_id = subentry_id
+        self._attr_unique_id = f"{subentry_id}_total"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, subentry_id)})
+
+    @property
+    def available(self) -> bool:
+        return self._controller.get_zone(self._zone_id) is not None
+
+    @property
+    def native_value(self) -> float:
+        return self._controller.total_minutes(self._zone_id)
 
     async def async_added_to_hass(self) -> None:
         self.async_on_remove(
