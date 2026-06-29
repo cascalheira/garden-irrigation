@@ -163,6 +163,7 @@ const STR = {
     rainDelayPrompt: "Pause all watering for how many hours?",
     runFor: "Run for…",
     runForPrompt: "Run this zone for how many minutes?",
+    hoursUnit: "hours",
     lastWatered: (t) => `last ${t}`,
     relDay: (n) => `${n}d ago`,
     relHour: (n) => `${n}h ago`,
@@ -314,6 +315,7 @@ const STR = {
     rainDelayPrompt: "Pausar toda a rega durante quantas horas?",
     runFor: "Regar durante…",
     runForPrompt: "Regar esta zona durante quantos minutos?",
+    hoursUnit: "horas",
     lastWatered: (t) => `última ${t}`,
     relDay: (n) => `há ${n}d`,
     relHour: (n) => `há ${n}h`,
@@ -427,6 +429,31 @@ const STYLES = `
   .tab.on { color: var(--primary-color); border-bottom-color: var(--primary-color); }
   .tab-body { padding-top: 14px; }
   .zone-add-row { display: flex; margin-bottom: 12px; }
+
+  /* ---- Small number-prompt dialog ---- */
+  .overlay-panel.dialog { width: min(360px, 94vw); padding: 18px 20px 16px; }
+  .dlg-head { display: flex; align-items: center; gap: 10px; font-weight: 700;
+    font-size: 1.15rem; color: var(--primary-text-color); }
+  .dlg-head ha-icon { color: var(--primary-color); --mdc-icon-size: 24px; }
+  .dlg-label { color: var(--secondary-text-color); font-size: .9rem; margin: 10px 0 12px; }
+  .dlg-input { display: flex; align-items: center; gap: 10px; }
+  .dlg-input input.num { font-size: 1.4rem; font-weight: 700; text-align: center;
+    padding: 10px; width: 100%; }
+  .dlg-unit { color: var(--secondary-text-color); font-size: .95rem; font-weight: 600; flex: none; }
+  .dlg-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .dlg-chip { flex: 1 1 auto; min-width: 52px; padding: 8px 10px; border: 1px solid var(--divider-color);
+    border-radius: 10px; background: transparent; cursor: pointer; font: inherit;
+    font-weight: 600; font-size: .9rem; color: var(--primary-text-color); }
+  .dlg-chip:hover { background: var(--secondary-background-color); }
+  .dlg-chip.on { color: var(--text-primary-color, #fff); background: var(--primary-color);
+    border-color: var(--primary-color); }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+  .dlg-btn { padding: 9px 16px; border: none; border-radius: 10px; cursor: pointer;
+    font: inherit; font-weight: 600; color: var(--primary-text-color);
+    background: var(--secondary-background-color); }
+  .dlg-btn.primary { display: inline-flex; align-items: center; gap: 6px;
+    color: var(--text-primary-color, #fff); background: var(--primary-color); }
+  .dlg-btn.primary ha-icon { --mdc-icon-size: 18px; }
 
   /* ---- History ---- */
   .overlay-panel.hist { width: min(560px, 96vw); padding: 6px 16px 18px; }
@@ -622,6 +649,7 @@ class GardenIrrigationCard extends HTMLElement {
     this._editOpen = false; // whether the edit overlay is shown
     this._tab = "zones"; // active overlay tab: zones | schedule | rain
     this._historyOpen = false;
+    this._dialog = null; // transient number-prompt modal (rain delay / run for)
     this._history = [];
     this._histTab = "list"; // history overlay tab: list | calendar
     this._histDay = null; // when set, list shows only this YYYY-MM-DD
@@ -782,6 +810,7 @@ class GardenIrrigationCard extends HTMLElement {
     }
 
     if (this._historyOpen) root.appendChild(this._buildHistoryOverlay());
+    if (this._dialog) root.appendChild(this._buildDialog());
 
     this.shadowRoot.replaceChildren(root);
   }
@@ -892,12 +921,28 @@ class GardenIrrigationCard extends HTMLElement {
     return div;
   }
 
-  async _promptRainDelay(setup) {
-    const ans = window.prompt(this._t("rainDelayPrompt"), "24");
-    if (ans == null) return;
-    const hrs = parseFloat(ans);
-    if (!hrs || hrs <= 0) return;
-    this._setRainDelay(setup, hrs);
+  _promptRainDelay(setup) {
+    this._dialog = {
+      key: "delay",
+      icon: "mdi:weather-rainy",
+      title: this._t("rainDelay"),
+      label: this._t("rainDelayPrompt"),
+      value: 24,
+      min: 1,
+      max: 240,
+      step: 1,
+      unit: this._t("hoursUnit"),
+      presets: [
+        [6, "6h"],
+        [12, "12h"],
+        [24, "24h"],
+        [48, "48h"],
+        [72, "72h"],
+      ],
+      confirm: this._t("rainDelay"),
+      onConfirm: (n) => this._setRainDelay(setup, n),
+    };
+    this._rebuild();
   }
 
   async _setRainDelay(setup, hours) {
@@ -913,24 +958,153 @@ class GardenIrrigationCard extends HTMLElement {
     }
   }
 
-  async _runCustom(setup, zone) {
-    const ans = window.prompt(
-      this._t("runForPrompt"),
-      String(zone.effective_duration ?? zone.duration)
-    );
-    if (ans == null) return;
-    const mins = parseInt(ans, 10);
-    if (!mins || mins < 1) return;
+  _runCustom(setup, zone) {
+    this._dialog = {
+      key: "runfor",
+      icon: "mdi:timer-play-outline",
+      title: `${this._t("runFor")} ${zone.name || ""}`.trim(),
+      label: this._t("runForPrompt"),
+      value: zone.effective_duration ?? zone.duration ?? 10,
+      min: 1,
+      max: 60,
+      step: 1,
+      unit: this._t("minUnit"),
+      presets: [
+        [5, "5"],
+        [10, "10"],
+        [15, "15"],
+        [30, "30"],
+      ],
+      confirm: this._t("run"),
+      onConfirm: (n) => this._doRunCustom(setup, zone, n),
+    };
+    this._rebuild();
+  }
+
+  async _doRunCustom(setup, zone, mins) {
     try {
       await this._ws({
         type: "garden_irrigation/zone/start",
         entry_id: setup.entry_id,
         zone_id: zone.zone_id,
-        duration: Math.min(60, mins),
+        duration: Math.max(1, Math.min(60, Math.round(mins))),
       });
     } catch (err) {
       this._toast(this._t("actionFailed", err.message || err));
     }
+  }
+
+  _closeDialog() {
+    this._dialog = null;
+    this._rebuild();
+  }
+
+  _buildDialog() {
+    const d = this._dialog;
+    const overlay = document.createElement("div");
+    overlay.className = "overlay";
+    const bg = document.createElement("div");
+    bg.className = "overlay-bg";
+    bg.addEventListener("click", () => this._closeDialog());
+
+    const panel = document.createElement("div");
+    panel.className = "overlay-panel dialog";
+
+    const head = document.createElement("div");
+    head.className = "dlg-head";
+    head.innerHTML =
+      `<ha-icon icon="${d.icon}"></ha-icon><span>${this._escape(d.title)}</span>`;
+    panel.appendChild(head);
+
+    if (d.label) {
+      const lbl = document.createElement("div");
+      lbl.className = "dlg-label";
+      lbl.textContent = d.label;
+      panel.appendChild(lbl);
+    }
+
+    // Number input + unit
+    const inputRow = document.createElement("div");
+    inputRow.className = "dlg-input";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.className = "num";
+    input.min = d.min;
+    input.max = d.max;
+    input.step = d.step;
+    input.value = d.value;
+    input.addEventListener("input", () => {
+      d.value = input.value;
+      this._syncDialogChips(panel, input.value);
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") this._confirmDialog(input.value);
+      else if (e.key === "Escape") this._closeDialog();
+    });
+    const unit = document.createElement("span");
+    unit.className = "dlg-unit";
+    unit.textContent = d.unit || "";
+    inputRow.append(input, unit);
+    panel.appendChild(inputRow);
+
+    // Preset chips
+    if (d.presets && d.presets.length) {
+      const chips = document.createElement("div");
+      chips.className = "dlg-chips";
+      for (const [val, label] of d.presets) {
+        const c = document.createElement("button");
+        c.className = "dlg-chip" + (String(val) === String(d.value) ? " on" : "");
+        c.dataset.val = val;
+        c.textContent = label;
+        c.addEventListener("click", () => {
+          d.value = val;
+          input.value = val;
+          this._syncDialogChips(panel, val);
+        });
+        chips.appendChild(c);
+      }
+      panel.appendChild(chips);
+    }
+
+    // Actions
+    const actions = document.createElement("div");
+    actions.className = "dlg-actions";
+    const cancel = document.createElement("button");
+    cancel.className = "dlg-btn";
+    cancel.textContent = this._t("cancel");
+    cancel.addEventListener("click", () => this._closeDialog());
+    const ok = document.createElement("button");
+    ok.className = "dlg-btn primary";
+    ok.innerHTML = `<ha-icon icon="${d.icon}"></ha-icon> ${this._escape(d.confirm)}`;
+    ok.addEventListener("click", () => this._confirmDialog(input.value));
+    actions.append(cancel, ok);
+    panel.appendChild(actions);
+
+    overlay.append(bg, panel);
+    // Focus the field once mounted.
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+    return overlay;
+  }
+
+  _syncDialogChips(panel, value) {
+    panel.querySelectorAll(".dlg-chip").forEach((c) => {
+      c.classList.toggle("on", String(c.dataset.val) === String(value));
+    });
+  }
+
+  _confirmDialog(raw) {
+    const d = this._dialog;
+    if (!d) return;
+    const n = parseFloat(raw);
+    if (isNaN(n) || n < d.min) return;
+    const value = Math.min(d.max, n);
+    const onConfirm = d.onConfirm;
+    this._dialog = null;
+    this._rebuild();
+    if (onConfirm) onConfirm(value);
   }
 
   async _openHistory() {
