@@ -518,13 +518,23 @@ const STYLES = `
   .cal-cell.empty { background: transparent; }
   .cal-cell.today { outline: 2px solid var(--primary-color); outline-offset: -2px; }
   .cal-cell.hasdata { cursor: pointer; }
-  .cal-cell.hasdata:hover { filter: brightness(1.08); }
-  .cal-dot { width: 10px; height: 10px; border-radius: 3px; background: transparent; }
-  .cal-dot.s-complete { background: var(--success-color, #43a047); }
-  .cal-dot.s-partial { background: var(--warning-color, #d68f00); }
-  .cal-dot.s-failed { background: var(--error-color); }
-  .cal-dot.s-skipped { background: var(--primary-color); }
-  .cal-dot.s-running { background: var(--secondary-text-color); }
+  .cal-cell.hasdata:hover { filter: brightness(.97); }
+  /* Whole-day pastel status fills (month + heat-map) */
+  .cal-cell.s-complete, .heat-cell.s-complete {
+    background: rgba(67,160,71,.22);
+    background: color-mix(in srgb, var(--success-color, #43a047) 26%, var(--card-background-color, #fff)); }
+  .cal-cell.s-partial, .heat-cell.s-partial {
+    background: rgba(214,143,0,.22);
+    background: color-mix(in srgb, var(--warning-color, #d68f00) 26%, var(--card-background-color, #fff)); }
+  .cal-cell.s-failed, .heat-cell.s-failed {
+    background: rgba(216,72,59,.20);
+    background: color-mix(in srgb, var(--error-color, #d8483b) 24%, var(--card-background-color, #fff)); }
+  .cal-cell.s-skipped, .heat-cell.s-skipped {
+    background: rgba(3,169,244,.18);
+    background: color-mix(in srgb, var(--primary-color) 22%, var(--card-background-color, #fff)); }
+  .cal-cell.s-running, .heat-cell.s-running {
+    background: rgba(130,130,130,.18);
+    background: color-mix(in srgb, var(--secondary-text-color) 20%, var(--card-background-color, #fff)); }
   .cal-legend { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;
     margin: 16px 2px 4px; font-size: .78rem; color: var(--secondary-text-color); }
   .cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -549,11 +559,6 @@ const STYLES = `
   .heat-cell.hasdata { cursor: pointer; }
   .heat-cell.hasdata:hover { outline: 1px solid var(--primary-color); outline-offset: 1px; }
   .heat-cell.today { outline: 2px solid var(--primary-color); outline-offset: -1px; }
-  .heat-cell.s-complete { background: var(--success-color, #43a047); }
-  .heat-cell.s-partial { background: var(--warning-color, #d68f00); }
-  .heat-cell.s-failed { background: var(--error-color); }
-  .heat-cell.s-skipped { background: var(--primary-color); }
-  .heat-cell.s-running { background: var(--secondary-text-color); }
   .day-breakdown { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin: 12px 0 4px; }
   .day-bd-head { display: flex; align-items: center; justify-content: space-between;
     font-weight: 700; font-size: .8rem; letter-spacing: .03em; text-transform: uppercase;
@@ -1569,14 +1574,11 @@ class GardenIrrigationCard extends HTMLElement {
       if (key === todayKey) cell.classList.add("today");
       const num = document.createElement("div");
       num.textContent = String(day);
-      const dot = document.createElement("div");
-      dot.className = "cal-dot";
-      cell.append(num, dot);
+      cell.appendChild(num);
       const status = byDay[key] ? this._dayStatus(byDay[key]) : null;
       if (status) {
         hasAny = true;
-        dot.classList.add("s-" + status);
-        cell.classList.add("hasdata");
+        cell.classList.add("hasdata", "s-" + status);
         const mins = this._dayMinutes(byDay[key]);
         cell.title =
           this._t("legend" + status.charAt(0).toUpperCase() + status.slice(1)) +
