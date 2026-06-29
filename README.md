@@ -42,6 +42,10 @@ and services — no YAML required.
 - **History** — a per-setup activity log (runs, finishes, manual stops, rain
   skips, and failed-to-close warnings), persisted across restarts and shown in a
   formatted, colour-coded panel opened from the card (next to **Run sequence**).
+  A **Calendar** tab shows a month grid with one square per day — green when
+  watering completed (all zones that ran finished, including manual runs),
+  orange when partial, red when it failed, blue when skipped by rain. Tap a day
+  to jump to that day's events.
 - **Notifications** (optional, per setup) — pick **one or more** notify targets
   (entities *or* `mobile_app_*` services) and choose **which events** to be
   notified about: valve fails to close (**critical** alert), zone fails to start,
