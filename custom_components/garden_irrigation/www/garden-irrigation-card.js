@@ -103,6 +103,17 @@ const STR = {
     notifyTest: "Send test",
     notifyTestSent: "Test notification sent.",
     notifyTestFail: "Could not send — pick a target first.",
+    histList: "List",
+    histCalendar: "Calendar",
+    legendComplete: "Completed",
+    legendPartial: "Partial",
+    legendFailed: "Failed",
+    legendSkipped: "Rain-skipped",
+    legendRunning: "In progress",
+    calEmpty: "No watering this month.",
+    allDays: "All days",
+    prevMonth: "Previous month",
+    nextMonth: "Next month",
   },
   pt: {
     title: "Rega do jardim",
@@ -188,6 +199,17 @@ const STR = {
     notifyTest: "Enviar teste",
     notifyTestSent: "Notificação de teste enviada.",
     notifyTestFail: "Não foi possível enviar — escolha primeiro um destino.",
+    histList: "Lista",
+    histCalendar: "Calendário",
+    legendComplete: "Concluída",
+    legendPartial: "Parcial",
+    legendFailed: "Falhou",
+    legendSkipped: "Ignorada (chuva)",
+    legendRunning: "Em curso",
+    calEmpty: "Sem rega este mês.",
+    allDays: "Todos os dias",
+    prevMonth: "Mês anterior",
+    nextMonth: "Mês seguinte",
   },
 };
 
@@ -319,6 +341,44 @@ const STYLES = `
   .h-amber > ha-icon { color: var(--warning-color, #d68f00); }
   .h-red > ha-icon { color: var(--error-color); }
   .h-grey > ha-icon { color: var(--secondary-text-color); }
+  .hist-tabs { display: flex; gap: 6px; padding: 4px 0 2px; }
+  .hist-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 9px 10px; border: none; border-radius: 10px; cursor: pointer; font: inherit;
+    font-weight: 600; font-size: .9rem; color: var(--secondary-text-color);
+    background: var(--secondary-background-color); }
+  .hist-tab ha-icon { --mdc-icon-size: 18px; }
+  .hist-tab.on { color: var(--text-primary-color, #fff); background: var(--primary-color); }
+  .hist-back { display: inline-flex; align-items: center; gap: 6px; margin: 12px 2px 0;
+    padding: 6px 10px; border: none; border-radius: 8px; cursor: pointer; font: inherit;
+    font-size: .85rem; font-weight: 600; color: var(--primary-color); background: rgba(3,169,244,.10); }
+  .hist-back ha-icon { --mdc-icon-size: 16px; }
+  /* ---- History calendar ---- */
+  .cal-nav { display: flex; align-items: center; gap: 8px; margin: 14px 2px 10px; }
+  .cal-title { flex: 1; text-align: center; font-weight: 700; font-size: 1rem;
+    text-transform: capitalize; color: var(--primary-text-color); }
+  .cal-nav .icon-btn { flex: none; }
+  .cal-nav .icon-btn[disabled] { opacity: .3; pointer-events: none; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-dow { text-align: center; font-size: .7rem; font-weight: 700; letter-spacing: .03em;
+    text-transform: uppercase; color: var(--secondary-text-color); padding: 2px 0 4px; }
+  .cal-cell { aspect-ratio: 1 / 1; border-radius: 10px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 5px; font-size: .82rem; font-weight: 600;
+    color: var(--primary-text-color); background: var(--secondary-background-color); }
+  .cal-cell.empty { background: transparent; }
+  .cal-cell.today { outline: 2px solid var(--primary-color); outline-offset: -2px; }
+  .cal-cell.hasdata { cursor: pointer; }
+  .cal-cell.hasdata:hover { filter: brightness(1.08); }
+  .cal-dot { width: 10px; height: 10px; border-radius: 3px; background: transparent; }
+  .cal-dot.s-complete { background: var(--success-color, #43a047); }
+  .cal-dot.s-partial { background: var(--warning-color, #d68f00); }
+  .cal-dot.s-failed { background: var(--error-color); }
+  .cal-dot.s-skipped { background: var(--primary-color); }
+  .cal-dot.s-running { background: var(--secondary-text-color); }
+  .cal-legend { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;
+    margin: 16px 2px 4px; font-size: .78rem; color: var(--secondary-text-color); }
+  .cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .cal-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .cal-empty { text-align: center; color: var(--secondary-text-color); padding: 18px 0 4px; font-size: .9rem; }
 
   /* ---- View mode (compact, read-only) ---- */
   ha-card.view .header { padding-bottom: 8px; }
@@ -395,6 +455,9 @@ class GardenIrrigationCard extends HTMLElement {
     this._tab = "zones"; // active overlay tab: zones | schedule | rain
     this._historyOpen = false;
     this._history = [];
+    this._histTab = "list"; // history overlay tab: list | calendar
+    this._histDay = null; // when set, list shows only this YYYY-MM-DD
+    this._calMonth = null; // Date of the first of the displayed calendar month
     this._selected = null;
     this._addZoneOpen = false;
     this._addSetupOpen = false;
@@ -614,6 +677,9 @@ class GardenIrrigationCard extends HTMLElement {
 
   async _openHistory() {
     this._historyOpen = true;
+    this._histTab = "list";
+    this._histDay = null;
+    this._calMonth = null;
     this._rebuild();
     try {
       const res = await this._ws({
@@ -658,32 +724,231 @@ class GardenIrrigationCard extends HTMLElement {
     panel.appendChild(head);
 
     const events = this._history || [];
+
+    const tabs = document.createElement("div");
+    tabs.className = "hist-tabs";
+    for (const [id, icon, key] of [
+      ["list", "mdi:format-list-bulleted", "histList"],
+      ["calendar", "mdi:calendar-month", "histCalendar"],
+    ]) {
+      const b = document.createElement("button");
+      b.className = "hist-tab" + (this._histTab === id ? " on" : "");
+      b.innerHTML = `<ha-icon icon="${icon}"></ha-icon>${this._escape(this._t(key))}`;
+      b.addEventListener("click", () => {
+        this._histTab = id;
+        if (id === "calendar") this._histDay = null;
+        this._rebuild();
+      });
+      tabs.appendChild(b);
+    }
+    panel.appendChild(tabs);
+
     if (events.length === 0) {
       const empty = document.createElement("div");
       empty.className = "empty";
       empty.textContent = this._t("noHistory");
       panel.appendChild(empty);
+    } else if (this._histTab === "calendar") {
+      panel.appendChild(this._buildCalendar(events));
     } else {
-      const list = document.createElement("div");
-      list.className = "hist-list";
-      let lastDay = null;
-      for (const ev of events) {
-        const d = new Date(ev.ts);
-        const dayKey = d.toDateString();
-        if (dayKey !== lastDay) {
-          lastDay = dayKey;
-          const dh = document.createElement("div");
-          dh.className = "hist-day";
-          dh.textContent = this._formatDay(d);
-          list.appendChild(dh);
-        }
-        list.appendChild(this._buildHistRow(ev, d));
-      }
-      panel.appendChild(list);
+      panel.appendChild(this._buildHistList(events));
     }
 
     overlay.append(bg, panel);
     return overlay;
+  }
+
+  _buildHistList(events) {
+    const wrap = document.createElement("div");
+    if (this._histDay) {
+      const back = document.createElement("button");
+      back.className = "hist-back";
+      back.innerHTML =
+        `<ha-icon icon="mdi:chevron-left"></ha-icon>` +
+        this._escape(this._t("allDays"));
+      back.addEventListener("click", () => {
+        this._histDay = null;
+        this._rebuild();
+      });
+      wrap.appendChild(back);
+    }
+    const list = document.createElement("div");
+    list.className = "hist-list";
+    let lastDay = null;
+    for (const ev of events) {
+      const d = new Date(ev.ts);
+      if (this._histDay && this._dayKey(d) !== this._histDay) continue;
+      const dayKey = d.toDateString();
+      if (dayKey !== lastDay) {
+        lastDay = dayKey;
+        const dh = document.createElement("div");
+        dh.className = "hist-day";
+        dh.textContent = this._formatDay(d);
+        list.appendChild(dh);
+      }
+      list.appendChild(this._buildHistRow(ev, d));
+    }
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  _dayKey(d) {
+    return (
+      `${d.getFullYear()}-` +
+      `${String(d.getMonth() + 1).padStart(2, "0")}-` +
+      `${String(d.getDate()).padStart(2, "0")}`
+    );
+  }
+
+  // Classify a day's events into a single status for the calendar square.
+  _dayStatus(evs) {
+    let finished = 0,
+      interrupted = 0,
+      skipped = 0,
+      started = 0;
+    for (const ev of evs) {
+      if (ev.type === "finish") finished++;
+      else if (ev.type === "stop" || ev.type === "error") interrupted++;
+      else if (ev.type === "skip") skipped++;
+      else if (ev.type === "start") started++;
+    }
+    if (finished > 0 && interrupted === 0) return "complete";
+    if (finished > 0) return "partial";
+    if (interrupted > 0) return "failed";
+    if (started > 0) return "running";
+    if (skipped > 0) return "skipped";
+    return null;
+  }
+
+  _statusColor(s) {
+    return (
+      {
+        complete: "var(--success-color, #43a047)",
+        partial: "var(--warning-color, #d68f00)",
+        failed: "var(--error-color)",
+        skipped: "var(--primary-color)",
+        running: "var(--secondary-text-color)",
+      }[s] || "var(--secondary-text-color)"
+    );
+  }
+
+  _buildCalendar(events) {
+    const wrap = document.createElement("div");
+    const locale = this._lang() === "pt" ? "pt-PT" : "en";
+
+    const byDay = {};
+    for (const ev of events) {
+      const k = this._dayKey(new Date(ev.ts));
+      (byDay[k] = byDay[k] || []).push(ev);
+    }
+
+    const now = new Date();
+    if (!this._calMonth) this._calMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const year = this._calMonth.getFullYear();
+    const month = this._calMonth.getMonth();
+
+    // Month navigation
+    const nav = document.createElement("div");
+    nav.className = "cal-nav";
+    const prev = document.createElement("button");
+    prev.className = "icon-btn ghost";
+    prev.title = this._t("prevMonth");
+    prev.innerHTML = `<ha-icon icon="mdi:chevron-left"></ha-icon>`;
+    prev.addEventListener("click", () => {
+      this._calMonth = new Date(year, month - 1, 1);
+      this._rebuild();
+    });
+    const title = document.createElement("div");
+    title.className = "cal-title";
+    title.textContent = this._calMonth.toLocaleDateString(locale, {
+      month: "long",
+      year: "numeric",
+    });
+    const next = document.createElement("button");
+    next.className = "icon-btn ghost";
+    next.title = this._t("nextMonth");
+    next.innerHTML = `<ha-icon icon="mdi:chevron-right"></ha-icon>`;
+    if (year === now.getFullYear() && month === now.getMonth()) {
+      next.setAttribute("disabled", "");
+    } else {
+      next.addEventListener("click", () => {
+        this._calMonth = new Date(year, month + 1, 1);
+        this._rebuild();
+      });
+    }
+    nav.append(prev, title, next);
+    wrap.appendChild(nav);
+
+    // Grid
+    const grid = document.createElement("div");
+    grid.className = "cal-grid";
+    const monRef = new Date(2024, 0, 1); // a Monday
+    const dowFmt = new Intl.DateTimeFormat(locale, { weekday: "short" });
+    for (let i = 0; i < 7; i++) {
+      const ref = new Date(monRef);
+      ref.setDate(monRef.getDate() + i);
+      const h = document.createElement("div");
+      h.className = "cal-dow";
+      h.textContent = dowFmt.format(ref).replace(".", "");
+      grid.appendChild(h);
+    }
+
+    const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // Mon = 0
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayKey = this._dayKey(now);
+    for (let i = 0; i < firstWeekday; i++) {
+      const blank = document.createElement("div");
+      blank.className = "cal-cell empty";
+      grid.appendChild(blank);
+    }
+    let hasAny = false;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const key = this._dayKey(new Date(year, month, day));
+      const cell = document.createElement("div");
+      cell.className = "cal-cell";
+      if (key === todayKey) cell.classList.add("today");
+      const num = document.createElement("div");
+      num.textContent = String(day);
+      const dot = document.createElement("div");
+      dot.className = "cal-dot";
+      const status = byDay[key] ? this._dayStatus(byDay[key]) : null;
+      if (status) {
+        hasAny = true;
+        dot.classList.add("s-" + status);
+        cell.classList.add("hasdata");
+        cell.title = this._t(
+          "legend" + status.charAt(0).toUpperCase() + status.slice(1)
+        );
+        cell.addEventListener("click", () => {
+          this._histDay = key;
+          this._histTab = "list";
+          this._rebuild();
+        });
+      }
+      cell.append(num, dot);
+      grid.appendChild(cell);
+    }
+    wrap.appendChild(grid);
+
+    if (!hasAny) {
+      const empty = document.createElement("div");
+      empty.className = "cal-empty";
+      empty.textContent = this._t("calEmpty");
+      wrap.appendChild(empty);
+    }
+
+    const legend = document.createElement("div");
+    legend.className = "cal-legend";
+    for (const s of ["complete", "partial", "failed", "skipped"]) {
+      const span = document.createElement("span");
+      span.innerHTML =
+        `<i style="background:${this._statusColor(s)}"></i>` +
+        this._escape(this._t("legend" + s.charAt(0).toUpperCase() + s.slice(1)));
+      legend.appendChild(span);
+    }
+    wrap.appendChild(legend);
+
+    return wrap;
   }
 
   _buildHistRow(ev, d) {
