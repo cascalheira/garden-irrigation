@@ -114,6 +114,16 @@ const STR = {
     allDays: "All days",
     prevMonth: "Previous month",
     nextMonth: "Next month",
+    monthView: "Month",
+    weekView: "Weeks",
+    clearHistory: "Clear history",
+    confirmClear: "Erase all activity history for this setup? This cannot be undone.",
+    minUnit: "min",
+    summaryWatered: (n, m, mins) => `Watered ${n} of ${m} days · ${mins} min`,
+    heatRange: (a, b) => `${a} – ${b}`,
+    breakdownTitle: "Zones",
+    dayNoRuns: "No zone runs this day.",
+    retentionNote: (d) => `History is kept for up to ${d} days.`,
   },
   pt: {
     title: "Rega do jardim",
@@ -210,6 +220,16 @@ const STR = {
     allDays: "Todos os dias",
     prevMonth: "Mês anterior",
     nextMonth: "Mês seguinte",
+    monthView: "Mês",
+    weekView: "Semanas",
+    clearHistory: "Limpar histórico",
+    confirmClear: "Apagar todo o histórico de atividade deste conjunto? Não pode ser desfeito.",
+    minUnit: "min",
+    summaryWatered: (n, m, mins) => `Regou ${n} de ${m} dias · ${mins} min`,
+    heatRange: (a, b) => `${a} – ${b}`,
+    breakdownTitle: "Zonas",
+    dayNoRuns: "Sem regas neste dia.",
+    retentionNote: (d) => `O histórico é mantido até ${d} dias.`,
   },
 };
 
@@ -379,6 +399,45 @@ const STYLES = `
   .cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
   .cal-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
   .cal-empty { text-align: center; color: var(--secondary-text-color); padding: 18px 0 4px; font-size: .9rem; }
+  .cal-min { font-size: .58rem; font-weight: 600; line-height: 1; color: var(--secondary-text-color); margin-top: 1px; }
+  .cal-seg { display: flex; gap: 4px; margin: 12px 0 4px; padding: 3px;
+    background: var(--secondary-background-color); border-radius: 10px; }
+  .cal-seg-btn { flex: 1; padding: 7px 10px; border: none; border-radius: 8px; cursor: pointer;
+    font: inherit; font-weight: 600; font-size: .85rem; color: var(--secondary-text-color);
+    background: transparent; }
+  .cal-seg-btn.on { color: var(--primary-text-color); background: var(--card-background-color, #fff);
+    box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .cal-summary { margin: 16px 2px 2px; }
+  .cal-sum-head { font-weight: 700; font-size: .92rem; color: var(--primary-text-color); text-align: center; }
+  .cal-summary .cal-legend { margin-top: 8px; }
+  .heat-title { margin: 12px 2px 10px; font-size: .9rem; color: var(--secondary-text-color); }
+  .heat-grid { display: grid; grid-template-rows: repeat(7, 1fr); grid-auto-flow: column;
+    grid-auto-columns: 1fr; gap: 3px; }
+  .heat-cell { aspect-ratio: 1 / 1; border-radius: 3px; background: var(--secondary-background-color); }
+  .heat-cell.future { background: transparent; }
+  .heat-cell.hasdata { cursor: pointer; }
+  .heat-cell.hasdata:hover { outline: 1px solid var(--primary-color); outline-offset: 1px; }
+  .heat-cell.today { outline: 2px solid var(--primary-color); outline-offset: -1px; }
+  .heat-cell.s-complete { background: var(--success-color, #43a047); }
+  .heat-cell.s-partial { background: var(--warning-color, #d68f00); }
+  .heat-cell.s-failed { background: var(--error-color); }
+  .heat-cell.s-skipped { background: var(--primary-color); }
+  .heat-cell.s-running { background: var(--secondary-text-color); }
+  .day-breakdown { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin: 12px 0 4px; }
+  .day-bd-head { display: flex; align-items: center; justify-content: space-between;
+    font-weight: 700; font-size: .8rem; letter-spacing: .03em; text-transform: uppercase;
+    color: var(--secondary-text-color); }
+  .day-bd-total { color: var(--primary-text-color); font-variant-numeric: tabular-nums; }
+  .day-bd-none { color: var(--secondary-text-color); font-size: .88rem; margin-top: 6px; }
+  .day-bd-row { display: flex; align-items: center; gap: 10px; padding: 7px 0 0; }
+  .day-bd-row ha-icon { --mdc-icon-size: 18px; flex: none; }
+  .day-bd-row.h-green ha-icon { color: var(--success-color, #43a047); }
+  .day-bd-row.h-grey ha-icon { color: var(--secondary-text-color); }
+  .day-bd-row.h-red ha-icon { color: var(--error-color); }
+  .day-bd-row.h-blue ha-icon { color: var(--primary-color); }
+  .day-bd-zone { flex: 1; min-width: 0; font-weight: 600; color: var(--primary-text-color); }
+  .day-bd-min { color: var(--secondary-text-color); font-size: .85rem; font-variant-numeric: tabular-nums; }
+  .hist-note { text-align: center; color: var(--secondary-text-color); font-size: .74rem; margin: 16px 2px 4px; opacity: .8; }
 
   /* ---- View mode (compact, read-only) ---- */
   ha-card.view .header { padding-bottom: 8px; }
@@ -458,6 +517,8 @@ class GardenIrrigationCard extends HTMLElement {
     this._histTab = "list"; // history overlay tab: list | calendar
     this._histDay = null; // when set, list shows only this YYYY-MM-DD
     this._calMonth = null; // Date of the first of the displayed calendar month
+    this._calView = "month"; // calendar layout: month | weeks
+    this._histMeta = {}; // retention metadata from the backend
     this._selected = null;
     this._addZoneOpen = false;
     this._addSetupOpen = false;
@@ -680,6 +741,7 @@ class GardenIrrigationCard extends HTMLElement {
     this._histTab = "list";
     this._histDay = null;
     this._calMonth = null;
+    this._calView = "month";
     this._rebuild();
     try {
       const res = await this._ws({
@@ -687,8 +749,25 @@ class GardenIrrigationCard extends HTMLElement {
         entry_id: this._currentSetup().entry_id,
       });
       this._history = res.events || [];
+      this._histMeta = res.meta || {};
     } catch (e) {
       this._history = [];
+      this._histMeta = {};
+    }
+    this._rebuild();
+  }
+
+  async _clearHistory() {
+    if (!confirm(this._t("confirmClear"))) return;
+    try {
+      await this._ws({
+        type: "garden_irrigation/history_clear",
+        entry_id: this._currentSetup().entry_id,
+      });
+      this._history = [];
+      this._histDay = null;
+    } catch (e) {
+      alert(this._t("actionFailed", e.message || e));
     }
     this._rebuild();
   }
@@ -715,12 +794,21 @@ class GardenIrrigationCard extends HTMLElement {
     )}</span>`;
     const spacer = document.createElement("div");
     spacer.style.flex = "1";
+    head.append(spacer);
+    if (this._hass?.user?.is_admin && (this._history || []).length) {
+      const clr = document.createElement("button");
+      clr.className = "icon-btn ghost";
+      clr.title = this._t("clearHistory");
+      clr.innerHTML = `<ha-icon icon="mdi:trash-can-outline"></ha-icon>`;
+      clr.addEventListener("click", () => this._clearHistory());
+      head.append(clr);
+    }
     const close = document.createElement("button");
     close.className = "icon-btn ghost";
     close.title = this._t("close");
     close.innerHTML = `<ha-icon icon="mdi:close"></ha-icon>`;
     close.addEventListener("click", () => this._closeHistory());
-    head.append(spacer, close);
+    head.append(close);
     panel.appendChild(head);
 
     const events = this._history || [];
@@ -754,6 +842,13 @@ class GardenIrrigationCard extends HTMLElement {
       panel.appendChild(this._buildHistList(events));
     }
 
+    if (events.length && this._histMeta?.max_days) {
+      const note = document.createElement("div");
+      note.className = "hist-note";
+      note.textContent = this._t("retentionNote", this._histMeta.max_days);
+      panel.appendChild(note);
+    }
+
     overlay.append(bg, panel);
     return overlay;
   }
@@ -771,6 +866,7 @@ class GardenIrrigationCard extends HTMLElement {
         this._rebuild();
       });
       wrap.appendChild(back);
+      wrap.appendChild(this._buildDayBreakdown(this._histDay));
     }
     const list = document.createElement("div");
     list.className = "hist-list";
@@ -832,9 +928,142 @@ class GardenIrrigationCard extends HTMLElement {
     );
   }
 
+  // Pair each "start" with its terminating event to recover per-zone runs and
+  // the minutes actually watered (full duration on finish, elapsed on stop).
+  _pairRuns(evs) {
+    const sorted = [...evs].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    const open = {};
+    const runs = [];
+    for (const ev of sorted) {
+      if (ev.type === "start") {
+        open[ev.zone] = ev;
+      } else if (["finish", "stop", "error"].includes(ev.type)) {
+        const s = open[ev.zone];
+        delete open[ev.zone];
+        let minutes = 0;
+        if (ev.type === "finish") minutes = s && s.minutes ? s.minutes : 0;
+        else if (ev.type === "stop" && s)
+          minutes = Math.max(
+            0,
+            Math.round((new Date(ev.ts) - new Date(s.ts)) / 60000)
+          );
+        runs.push({
+          zone: ev.zone,
+          outcome: ev.type,
+          detail: ev.detail,
+          minutes,
+        });
+      }
+    }
+    for (const z in open) runs.push({ zone: z, outcome: "running", minutes: 0 });
+    return runs;
+  }
+
+  _dayMinutes(evs) {
+    return this._pairRuns(evs).reduce((a, r) => a + r.minutes, 0);
+  }
+
+  // Aggregate a set of day keys into period counts + watered totals.
+  _periodSummary(keys, byDay) {
+    const s = {
+      complete: 0,
+      partial: 0,
+      failed: 0,
+      skipped: 0,
+      wateredDays: 0,
+      minutes: 0,
+    };
+    for (const k of keys) {
+      const evs = byDay[k];
+      if (!evs) continue;
+      const st = this._dayStatus(evs);
+      if (st && s[st] !== undefined) s[st]++;
+      if (st === "complete" || st === "partial") s.wateredDays++;
+      s.minutes += this._dayMinutes(evs);
+    }
+    return s;
+  }
+
+  _buildSummary(summary, totalDays) {
+    const box = document.createElement("div");
+    box.className = "cal-summary";
+    const head = document.createElement("div");
+    head.className = "cal-sum-head";
+    head.textContent = this._t(
+      "summaryWatered",
+      summary.wateredDays,
+      totalDays,
+      summary.minutes
+    );
+    box.appendChild(head);
+    const chips = document.createElement("div");
+    chips.className = "cal-legend";
+    for (const s of ["complete", "partial", "failed", "skipped"]) {
+      const span = document.createElement("span");
+      if (!summary[s]) span.style.opacity = ".45";
+      span.innerHTML =
+        `<i style="background:${this._statusColor(s)}"></i>` +
+        `${summary[s]} ` +
+        this._escape(this._t("legend" + s.charAt(0).toUpperCase() + s.slice(1)));
+      chips.appendChild(span);
+    }
+    box.appendChild(chips);
+    return box;
+  }
+
+  // Per-zone breakdown shown atop the single-day list view.
+  _buildDayBreakdown(dayKey) {
+    const evs = (this._history || []).filter(
+      (ev) => this._dayKey(new Date(ev.ts)) === dayKey
+    );
+    const runs = this._pairRuns(evs);
+    const box = document.createElement("div");
+    box.className = "day-breakdown";
+    const total = runs.reduce((a, r) => a + r.minutes, 0);
+    const head = document.createElement("div");
+    head.className = "day-bd-head";
+    head.innerHTML =
+      `<span>${this._escape(this._t("breakdownTitle"))}</span>` +
+      `<span class="day-bd-total">${total} ${this._escape(
+        this._t("minUnit")
+      )}</span>`;
+    box.appendChild(head);
+    if (runs.length === 0) {
+      const none = document.createElement("div");
+      none.className = "day-bd-none";
+      none.textContent = this._t("dayNoRuns");
+      box.appendChild(none);
+      return box;
+    }
+    const icons = {
+      finish: { icon: "mdi:check-circle", cls: "h-green" },
+      stop: { icon: "mdi:stop-circle", cls: "h-grey" },
+      error: { icon: "mdi:alert-circle", cls: "h-red" },
+      running: { icon: "mdi:play-circle", cls: "h-blue" },
+    };
+    for (const r of runs) {
+      const style = icons[r.outcome] || icons.running;
+      const row = document.createElement("div");
+      row.className = "day-bd-row " + style.cls;
+      row.innerHTML =
+        `<ha-icon icon="${style.icon}"></ha-icon>` +
+        `<span class="day-bd-zone">${this._escape(r.zone || "")}</span>` +
+        `<span class="day-bd-min">${
+          r.minutes ? r.minutes + " " + this._escape(this._t("minUnit")) : "—"
+        }</span>`;
+      box.appendChild(row);
+    }
+    return box;
+  }
+
+  _selectDay(key) {
+    this._histDay = key;
+    this._histTab = "list";
+    this._rebuild();
+  }
+
   _buildCalendar(events) {
     const wrap = document.createElement("div");
-    const locale = this._lang() === "pt" ? "pt-PT" : "en";
 
     const byDay = {};
     for (const ev of events) {
@@ -842,12 +1071,52 @@ class GardenIrrigationCard extends HTMLElement {
       (byDay[k] = byDay[k] || []).push(ev);
     }
 
+    // Month / Weeks layout toggle
+    const seg = document.createElement("div");
+    seg.className = "cal-seg";
+    for (const [id, key] of [
+      ["month", "monthView"],
+      ["weeks", "weekView"],
+    ]) {
+      const b = document.createElement("button");
+      b.className = "cal-seg-btn" + (this._calView === id ? " on" : "");
+      b.textContent = this._t(key);
+      b.addEventListener("click", () => {
+        this._calView = id;
+        this._rebuild();
+      });
+      seg.appendChild(b);
+    }
+    wrap.appendChild(seg);
+
+    const view =
+      this._calView === "weeks"
+        ? this._buildHeatmap(byDay)
+        : this._buildMonthGrid(byDay);
+    wrap.appendChild(view.node);
+
+    if (view.hasAny) {
+      const summary = this._periodSummary(view.keys, byDay);
+      wrap.appendChild(this._buildSummary(summary, view.totalDays));
+    } else {
+      const empty = document.createElement("div");
+      empty.className = "cal-empty";
+      empty.textContent = this._t("calEmpty");
+      wrap.appendChild(empty);
+    }
+
+    return wrap;
+  }
+
+  _buildMonthGrid(byDay) {
+    const node = document.createElement("div");
+    const locale = this._lang() === "pt" ? "pt-PT" : "en";
     const now = new Date();
-    if (!this._calMonth) this._calMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (!this._calMonth)
+      this._calMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const year = this._calMonth.getFullYear();
     const month = this._calMonth.getMonth();
 
-    // Month navigation
     const nav = document.createElement("div");
     nav.className = "cal-nav";
     const prev = document.createElement("button");
@@ -868,7 +1137,8 @@ class GardenIrrigationCard extends HTMLElement {
     next.className = "icon-btn ghost";
     next.title = this._t("nextMonth");
     next.innerHTML = `<ha-icon icon="mdi:chevron-right"></ha-icon>`;
-    if (year === now.getFullYear() && month === now.getMonth()) {
+    const atCurrent = year === now.getFullYear() && month === now.getMonth();
+    if (atCurrent) {
       next.setAttribute("disabled", "");
     } else {
       next.addEventListener("click", () => {
@@ -877,9 +1147,8 @@ class GardenIrrigationCard extends HTMLElement {
       });
     }
     nav.append(prev, title, next);
-    wrap.appendChild(nav);
+    node.appendChild(nav);
 
-    // Grid
     const grid = document.createElement("div");
     grid.className = "cal-grid";
     const monRef = new Date(2024, 0, 1); // a Monday
@@ -901,9 +1170,11 @@ class GardenIrrigationCard extends HTMLElement {
       blank.className = "cal-cell empty";
       grid.appendChild(blank);
     }
+    const keys = [];
     let hasAny = false;
     for (let day = 1; day <= daysInMonth; day++) {
       const key = this._dayKey(new Date(year, month, day));
+      keys.push(key);
       const cell = document.createElement("div");
       cell.className = "cal-cell";
       if (key === todayKey) cell.classList.add("today");
@@ -911,44 +1182,99 @@ class GardenIrrigationCard extends HTMLElement {
       num.textContent = String(day);
       const dot = document.createElement("div");
       dot.className = "cal-dot";
+      cell.append(num, dot);
       const status = byDay[key] ? this._dayStatus(byDay[key]) : null;
       if (status) {
         hasAny = true;
         dot.classList.add("s-" + status);
         cell.classList.add("hasdata");
-        cell.title = this._t(
-          "legend" + status.charAt(0).toUpperCase() + status.slice(1)
-        );
-        cell.addEventListener("click", () => {
-          this._histDay = key;
-          this._histTab = "list";
-          this._rebuild();
-        });
+        const mins = this._dayMinutes(byDay[key]);
+        cell.title =
+          this._t("legend" + status.charAt(0).toUpperCase() + status.slice(1)) +
+          (mins ? ` · ${mins} ${this._t("minUnit")}` : "");
+        if (mins) {
+          const m = document.createElement("div");
+          m.className = "cal-min";
+          m.textContent = `${mins}`;
+          cell.appendChild(m);
+        }
+        cell.addEventListener("click", () => this._selectDay(key));
       }
-      cell.append(num, dot);
       grid.appendChild(cell);
     }
-    wrap.appendChild(grid);
+    node.appendChild(grid);
 
-    if (!hasAny) {
-      const empty = document.createElement("div");
-      empty.className = "cal-empty";
-      empty.textContent = this._t("calEmpty");
-      wrap.appendChild(empty);
+    const totalDays = atCurrent ? now.getDate() : daysInMonth;
+    return { node, keys, totalDays, hasAny };
+  }
+
+  _buildHeatmap(byDay) {
+    const node = document.createElement("div");
+    const locale = this._lang() === "pt" ? "pt-PT" : "en";
+    const WEEKS = 26;
+    const now = new Date();
+    const todayKey = this._dayKey(now);
+
+    // Monday of the current week, then back (WEEKS-1) weeks for the first column.
+    const startMon = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    startMon.setDate(startMon.getDate() - ((now.getDay() + 6) % 7));
+    startMon.setDate(startMon.getDate() - (WEEKS - 1) * 7);
+
+    const title = document.createElement("div");
+    title.className = "cal-title heat-title";
+    const endLabel = now.toLocaleDateString(locale, {
+      day: "2-digit",
+      month: "short",
+    });
+    const startLabel = startMon.toLocaleDateString(locale, {
+      day: "2-digit",
+      month: "short",
+    });
+    title.textContent = this._t("heatRange", startLabel, endLabel);
+    node.appendChild(title);
+
+    const grid = document.createElement("div");
+    grid.className = "heat-grid";
+    const keys = [];
+    let hasAny = false;
+    let totalDays = 0;
+    const cursor = new Date(startMon);
+    for (let w = 0; w < WEEKS; w++) {
+      for (let d = 0; d < 7; d++) {
+        const key = this._dayKey(cursor);
+        const future = cursor > now;
+        const cell = document.createElement("div");
+        cell.className = "heat-cell";
+        if (future) cell.classList.add("future");
+        if (key === todayKey) cell.classList.add("today");
+        if (!future) {
+          keys.push(key);
+          totalDays++;
+        }
+        const status = !future && byDay[key] ? this._dayStatus(byDay[key]) : null;
+        if (status) {
+          hasAny = true;
+          cell.classList.add("s-" + status, "hasdata");
+          const mins = this._dayMinutes(byDay[key]);
+          const dLabel = cursor.toLocaleDateString(locale, {
+            day: "2-digit",
+            month: "short",
+          });
+          cell.title =
+            `${dLabel} · ` +
+            this._t(
+              "legend" + status.charAt(0).toUpperCase() + status.slice(1)
+            ) +
+            (mins ? ` · ${mins} ${this._t("minUnit")}` : "");
+          cell.addEventListener("click", () => this._selectDay(key));
+        }
+        grid.appendChild(cell);
+        cursor.setDate(cursor.getDate() + 1);
+      }
     }
+    node.appendChild(grid);
 
-    const legend = document.createElement("div");
-    legend.className = "cal-legend";
-    for (const s of ["complete", "partial", "failed", "skipped"]) {
-      const span = document.createElement("span");
-      span.innerHTML =
-        `<i style="background:${this._statusColor(s)}"></i>` +
-        this._escape(this._t("legend" + s.charAt(0).toUpperCase() + s.slice(1)));
-      legend.appendChild(span);
-    }
-    wrap.appendChild(legend);
-
-    return wrap;
+    return { node, keys, totalDays, hasAny };
   }
 
   _buildHistRow(ev, d) {

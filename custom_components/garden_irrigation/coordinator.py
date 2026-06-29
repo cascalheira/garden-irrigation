@@ -86,7 +86,8 @@ OFF_RETRY_DELAY = 3.0  # seconds between retry attempts
 
 # History log
 HISTORY_VERSION = 1
-MAX_HISTORY = 200
+MAX_HISTORY = 1000
+MAX_HISTORY_DAYS = 365
 
 
 @dataclass
@@ -204,7 +205,7 @@ class IrrigationController:
 
     async def async_setup(self) -> None:
         """Register schedule listeners and refresh derived state."""
-        self._history = await self._store.async_load() or []
+        self._history = self._prune_history(await self._store.async_load() or [])
         self._register_schedules()
         self._update_overlap_issue()
 
@@ -611,6 +612,31 @@ class IrrigationController:
         """Return the stored history events (oldest first)."""
         return self._history
 
+    def _prune_history(
+        self, events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Drop events older than MAX_HISTORY_DAYS and cap the total count."""
+        cutoff = dt_util.utcnow() - timedelta(days=MAX_HISTORY_DAYS)
+        pruned = []
+        for ev in events:
+            ts = ev.get("ts")
+            try:
+                when = dt_util.parse_datetime(ts) if ts else None
+            except (ValueError, TypeError):
+                when = None
+            if when is not None and when < cutoff:
+                continue
+            pruned.append(ev)
+        if len(pruned) > MAX_HISTORY:
+            pruned = pruned[-MAX_HISTORY:]
+        return pruned
+
+    async def async_clear_history(self) -> None:
+        """Erase the stored activity log."""
+        self._history = []
+        await self._store.async_save(self._history)
+        self._notify()
+
     @callback
     def _log(
         self,
@@ -637,6 +663,11 @@ class IrrigationController:
             self._history = self._history[-MAX_HISTORY:]
         self._store.async_delay_save(lambda: self._history, 5)
         self._notify()
+
+    @property
+    def history_meta(self) -> dict[str, Any]:
+        """Retention metadata for the history (shown in the card)."""
+        return {"max_days": MAX_HISTORY_DAYS, "max_events": MAX_HISTORY}
 
     # ----- rain skip -------------------------------------------------------------
 

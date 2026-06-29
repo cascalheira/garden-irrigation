@@ -75,6 +75,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         ws_stop_setup,
         ws_skip_status,
         ws_history,
+        ws_clear_history,
         ws_notify_test,
         ws_add_zone,
         ws_update_zone,
@@ -431,7 +432,33 @@ def ws_history(
     entry = _entry(hass, msg["entry_id"])
     controller = getattr(entry, "runtime_data", None) if entry else None
     events = list(controller.history) if controller is not None else []
-    connection.send_result(msg["id"], {"events": list(reversed(events))})
+    meta = controller.history_meta if controller is not None else {}
+    connection.send_result(
+        msg["id"], {"events": list(reversed(events)), "meta": meta}
+    )
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "garden_irrigation/history_clear",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_clear_history(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Erase the setup's activity log."""
+    entry = _entry(hass, msg["entry_id"])
+    controller = getattr(entry, "runtime_data", None) if entry else None
+    if controller is None:
+        connection.send_error(msg["id"], "not_found", "Setup not ready")
+        return
+    await controller.async_clear_history()
+    connection.send_result(msg["id"], {})
 
 
 @websocket_api.require_admin
