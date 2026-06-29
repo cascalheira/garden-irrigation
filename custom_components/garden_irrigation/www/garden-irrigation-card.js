@@ -2884,16 +2884,8 @@ class GardenIrrigationCard extends HTMLElement {
     // Run button (always available — a manual run works even on a disabled zone),
     // then the per-zone enable toggle. Both hidden only when the whole setup is off.
     if (setupEnabled) {
-      const custom = document.createElement("button");
-      custom.className = "runbtn";
-      custom.title = this._t("runFor");
-      custom.innerHTML = `<ha-icon icon="mdi:timer-play-outline"></ha-icon>`;
-      custom.addEventListener("click", () => this._runCustom(setup, zone));
-      actions.appendChild(custom);
-      refs.custom = custom;
-
       const action = document.createElement("button");
-      action.addEventListener("click", () => this._toggleRun(zone));
+      action.addEventListener("click", () => this._onZoneRun(setup, zone));
       actions.appendChild(action);
       refs.action = action;
 
@@ -3212,7 +3204,6 @@ class GardenIrrigationCard extends HTMLElement {
         refs.pill.hidden = !running;
         if (running) refs.pillText.textContent = this._t(source);
         refs.progress.hidden = !running;
-        if (refs.custom) refs.custom.hidden = running;
         if (refs.next) refs.next.hidden = running || !refs.hasNext;
         if (refs.action) {
           refs.action.className = running ? "runbtn stop" : "runbtn";
@@ -3252,6 +3243,16 @@ class GardenIrrigationCard extends HTMLElement {
   }
 
   /* ---------- mutations ---------- */
+
+  // Play button: stop if running, otherwise open the "run for…" dialog.
+  _onZoneRun(setup, zone) {
+    const st = this._stateFor(zone);
+    if (st && st.state === "on") {
+      this._toggleRun(zone);
+    } else {
+      this._runCustom(setup, zone);
+    }
+  }
 
   async _toggleRun(zone) {
     const st = this._stateFor(zone);
