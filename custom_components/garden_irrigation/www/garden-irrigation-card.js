@@ -23,6 +23,7 @@ const STR = {
     title: "Garden watering",
     edit: "Edit", done: "Done", addZone: "Add zone", addSetup: "Add setup",
     run: "Run", stop: "Stop", runSequence: "Run sequence",
+    confirmRunSequence: (n) => `Run the whole “${n}” sequence now?`,
     starts: "Starts", startsLabel: "Starts:", scheduling: "Scheduling:",
     sequential: "Sequential", specific: "Specific times",
     deleteSetup: "Delete setup", deleteZone: "Delete zone",
@@ -181,6 +182,7 @@ const STR = {
     title: "Rega do jardim",
     edit: "Editar", done: "Concluir", addZone: "Adicionar zona", addSetup: "Adicionar conjunto",
     run: "Regar", stop: "Parar", runSequence: "Correr sequência",
+    confirmRunSequence: (n) => `Correr já toda a sequência “${n}”?`,
     starts: "Começa", startsLabel: "Começa:", scheduling: "Agendamento:",
     sequential: "Sequencial", specific: "Horas específicas",
     deleteSetup: "Eliminar conjunto", deleteZone: "Eliminar zona",
@@ -888,12 +890,6 @@ class GardenIrrigationCard extends HTMLElement {
   _buildViewFooter(setup) {
     const footer = document.createElement("div");
     footer.className = "seq-footer";
-    if (
-      setup.mode === "sequential" &&
-      setup.zones.length &&
-      setup.enabled !== false
-    )
-      footer.appendChild(this._seqRunButton(setup));
 
     const delay = document.createElement("button");
     if (setup.rain_delay_until) {
@@ -1957,6 +1953,17 @@ class GardenIrrigationCard extends HTMLElement {
       actions.appendChild(addSetup);
     }
 
+    // View mode: run-sequence button (icon only) sits before the edit pencil.
+    if (
+      !this._edit &&
+      setup &&
+      setup.mode === "sequential" &&
+      setup.zones.length &&
+      setup.enabled !== false
+    ) {
+      actions.appendChild(this._seqRunButton(setup));
+    }
+
     const isEditCtx = this._edit;
     if (isEditCtx || this._showEditButton()) {
       const modeBtn = document.createElement("button");
@@ -2557,23 +2564,27 @@ class GardenIrrigationCard extends HTMLElement {
     return wrap;
   }
 
+  // Icon-only run/stop-sequence button shown in the header (sequential setups).
   _seqRunButton(setup) {
     const anyRunning = setup.zones.some((z) => {
       const st = this._stateFor(z);
       return st && st.state === "on";
     });
     const run = document.createElement("button");
+    run.className = "icon-btn ghost";
     if (anyRunning) {
-      run.className = "stop";
-      run.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon> ${this._t("stop")}`;
+      run.title = this._t("stop");
+      run.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon>`;
       run.addEventListener("click", () =>
         this._ws({ type: "garden_irrigation/setup/stop", entry_id: setup.entry_id })
       );
     } else {
-      run.innerHTML = `<ha-icon icon="mdi:play"></ha-icon> ${this._t("runSequence")}`;
-      run.addEventListener("click", () =>
-        this._ws({ type: "garden_irrigation/setup/run", entry_id: setup.entry_id })
-      );
+      run.title = this._t("runSequence");
+      run.innerHTML = `<ha-icon icon="mdi:play"></ha-icon>`;
+      run.addEventListener("click", () => {
+        if (!confirm(this._t("confirmRunSequence", setup.name))) return;
+        this._ws({ type: "garden_irrigation/setup/run", entry_id: setup.entry_id });
+      });
     }
     return run;
   }
