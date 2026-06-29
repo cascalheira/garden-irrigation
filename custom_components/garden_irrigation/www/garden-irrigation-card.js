@@ -138,6 +138,12 @@ const STR = {
     seasonalTitle: "Seasonal adjustment",
     seasonalLabel: "Adjust all zone durations",
     seasonalHint: "100% = configured time. Scales every zone's run.",
+    seasonalHelp:
+      "Scales the run time of every zone in this setup by this percentage, so you can water more or less by season without editing each zone. 100% = the configured time, 50% waters half as long, 150% waters half again as much. It applies to scheduled runs and to a normal manual start; a specific duration you type into “Run for…” is used as-is.",
+    cyclesHelp:
+      "Splits each run into this many short bursts so water soaks in instead of running off — useful on clay soil or slopes. Example: a 15-minute run with 3 cycles waters as 3 × 5 minutes. Leave at 1 for a single continuous run.",
+    soakHelp:
+      "How long the valve stays closed between cycles, letting water soak into the soil before the next burst. Only has an effect when Cycles is 2 or more.",
     masterTitle: "Master valve / pump",
     masterEntity: "Master valve / pump",
     masterLead: "Lead time (s)",
@@ -290,6 +296,12 @@ const STR = {
     seasonalTitle: "Ajuste sazonal",
     seasonalLabel: "Ajustar a duração de todas as zonas",
     seasonalHint: "100% = tempo configurado. Escala a rega de cada zona.",
+    seasonalHelp:
+      "Escala o tempo de rega de todas as zonas deste conjunto por esta percentagem, para regar mais ou menos conforme a estação sem editar cada zona. 100% = o tempo configurado, 50% rega metade do tempo, 150% rega mais 50%. Aplica-se às execuções agendadas e a um arranque manual normal; uma duração específica indicada em “Regar durante…” é usada tal como está.",
+    cyclesHelp:
+      "Divide cada rega neste número de períodos curtos para a água ser absorvida em vez de escorrer — útil em solo argiloso ou em declive. Exemplo: uma rega de 15 minutos com 3 ciclos rega em 3 × 5 minutos. Deixe em 1 para uma rega contínua.",
+    soakHelp:
+      "Tempo em que a válvula fica fechada entre ciclos, deixando a água infiltrar no solo antes do período seguinte. Só tem efeito quando os Ciclos forem 2 ou mais.",
     masterTitle: "Válvula principal / bomba",
     masterEntity: "Válvula principal / bomba",
     masterLead: "Tempo de avanço (s)",
@@ -609,6 +621,16 @@ const STYLES = `
   .rainbox { background: var(--secondary-background-color); border-radius: 12px; padding: 10px 14px; margin-top: 12px; }
   .rainbox-title { font-weight: 600; font-size: .9rem; margin-bottom: 6px; }
   .adv-hint { color: var(--secondary-text-color); font-size: .78rem; margin-top: 8px; line-height: 1.35; }
+  label.with-help { display: inline-flex; align-items: center; gap: 6px; }
+  .rainbox-title.with-help { display: flex; align-items: center; gap: 6px; }
+  .help-icon { --mdc-icon-size: 16px; color: var(--secondary-text-color); cursor: pointer; flex: none; }
+  .help-icon:hover { color: var(--primary-color); }
+  .field-help {
+    margin-top: 8px; font-size: .79rem; line-height: 1.45; color: var(--secondary-text-color);
+    background: var(--card-background-color, #fff); border: 1px solid var(--divider-color);
+    border-radius: 8px; padding: 9px 11px;
+  }
+  .field-help[hidden] { display: none; }
   .delaybar {
     display: flex; align-items: center; gap: 10px; margin: 6px 0 10px;
     padding: 11px 14px; border-radius: 12px; font-size: .86rem; font-weight: 500;
@@ -2140,9 +2162,12 @@ class GardenIrrigationCard extends HTMLElement {
     const season = document.createElement("div");
     season.className = "rainbox";
     const sTitle = document.createElement("div");
-    sTitle.className = "rainbox-title";
+    sTitle.className = "rainbox-title with-help";
     sTitle.textContent = this._t("seasonalTitle");
+    const sHelp = this._helpText(this._t("seasonalHelp"));
+    sTitle.appendChild(this._helpIcon(sHelp));
     season.appendChild(sTitle);
+    season.appendChild(sHelp);
     const sRow = document.createElement("div");
     sRow.className = "rain-sec";
     const slider = document.createElement("input");
@@ -2167,7 +2192,6 @@ class GardenIrrigationCard extends HTMLElement {
     );
     sRow.append(slider, sVal);
     season.appendChild(sRow);
-    season.appendChild(this._hint(this._t("seasonalHint")));
     wrap.appendChild(season);
 
     // --- Master valve / pump ---
@@ -2465,11 +2489,17 @@ class GardenIrrigationCard extends HTMLElement {
     return f;
   }
 
-  _numField(label, value, min, max, step, onChange) {
+  _numField(label, value, min, max, step, onChange, help) {
     const f = document.createElement("div");
     f.className = "field";
     const l = document.createElement("label");
     l.textContent = label;
+    let helpEl = null;
+    if (help) {
+      helpEl = this._helpText(help);
+      l.classList.add("with-help");
+      l.appendChild(this._helpIcon(helpEl));
+    }
     const i = document.createElement("input");
     i.type = "number";
     i.className = "num";
@@ -2482,7 +2512,29 @@ class GardenIrrigationCard extends HTMLElement {
       if (!isNaN(v)) onChange(v);
     });
     f.append(l, i);
+    if (helpEl) f.appendChild(helpEl);
     return f;
+  }
+
+  // A small (i) icon that toggles an associated help element on click.
+  _helpIcon(helpEl) {
+    const icon = document.createElement("ha-icon");
+    icon.setAttribute("icon", "mdi:information-outline");
+    icon.className = "help-icon";
+    icon.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      helpEl.hidden = !helpEl.hidden;
+    });
+    return icon;
+  }
+
+  _helpText(text) {
+    const div = document.createElement("div");
+    div.className = "field-help";
+    div.textContent = text;
+    div.hidden = true;
+    return div;
   }
 
   _buildSeqBar(setup) {
@@ -2945,15 +2997,28 @@ class GardenIrrigationCard extends HTMLElement {
       const csRow = document.createElement("div");
       csRow.className = "field-row";
       csRow.appendChild(
-        this._numField(this._t("cyclesLabel"), zone.cycles ?? 1, 1, 6, 1, (v) =>
-          this._updateZone(setup.entry_id, zone.zone_id, {
-            cycles: Math.round(v),
-          })
+        this._numField(
+          this._t("cyclesLabel"),
+          zone.cycles ?? 1,
+          1,
+          6,
+          1,
+          (v) =>
+            this._updateZone(setup.entry_id, zone.zone_id, {
+              cycles: Math.round(v),
+            }),
+          this._t("cyclesHelp")
         )
       );
       csRow.appendChild(
-        this._numField(this._t("soakLabel"), zone.soak ?? 0, 0, 60, 1, (v) =>
-          this._updateZone(setup.entry_id, zone.zone_id, { soak: Math.round(v) })
+        this._numField(
+          this._t("soakLabel"),
+          zone.soak ?? 0,
+          0,
+          60,
+          1,
+          (v) => this._updateZone(setup.entry_id, zone.zone_id, { soak: Math.round(v) }),
+          this._t("soakHelp")
         )
       );
       el.appendChild(csRow);
