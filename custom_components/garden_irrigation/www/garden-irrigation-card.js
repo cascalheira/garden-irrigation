@@ -29,6 +29,7 @@ const STR = {
     deleteSetup: "Delete setup", deleteZone: "Delete zone",
     noStartTimes: "No start times", noSchedules: "No schedules",
     schedulesLabel: "Schedules", add: "Add", duration: "Duration",
+    durationPrompt: "Water for how many minutes on each run?", save: "Save",
     preScript: "Pre-irrigation script", postScript: "Post-irrigation script",
     preScriptShort: "Pre-script", postScriptShort: "Post-script", switchRelay: "Switch / relay",
     scheduled: "scheduled", manual: "manual", watering: "Watering", everyDay: "every day",
@@ -188,6 +189,7 @@ const STR = {
     deleteSetup: "Eliminar conjunto", deleteZone: "Eliminar zona",
     noStartTimes: "Sem horas de início", noSchedules: "Sem agendamentos",
     schedulesLabel: "Agendamentos", add: "Adicionar", duration: "Duração",
+    durationPrompt: "Regar durante quantos minutos em cada rega?", save: "Guardar",
     preScript: "Script de pré-rega", postScript: "Script de pós-rega",
     preScriptShort: "Script pré", postScriptShort: "Script pós", switchRelay: "Interruptor / relé",
     scheduled: "agendada", manual: "manual", watering: "A regar", everyDay: "todos os dias",
@@ -393,7 +395,8 @@ const STYLES = `
   .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
   .row .label { width: 86px; color: var(--primary-text-color); font-weight: 500; }
   input[type="range"] { flex: 1; accent-color: var(--primary-color); height: 4px; }
-  .dur-value { font-weight: 700; min-width: 56px; text-align: right; }
+  .dur-btn { font-weight: 700; border-radius: 999px; }
+  .dur-btn ha-icon { --mdc-icon-size: 18px; color: var(--secondary-text-color); }
   .sched-label { color: var(--primary-text-color); font-weight: 500; margin-top: 14px; }
   .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
   .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--secondary-background-color); border-radius: 999px; padding: 5px 10px; font-size: .92rem; }
@@ -1015,6 +1018,34 @@ class GardenIrrigationCard extends HTMLElement {
     } catch (err) {
       this._toast(this._t("actionFailed", err.message || err));
     }
+  }
+
+  _promptDuration(setup, zone) {
+    this._dialog = {
+      key: "duration",
+      icon: "mdi:timer-cog-outline",
+      title: `${this._t("duration")} · ${zone.name || ""}`.trim(),
+      label: this._t("durationPrompt"),
+      value: zone.duration ?? 10,
+      min: 1,
+      max: 60,
+      step: 1,
+      unit: this._t("minUnit"),
+      presets: [
+        [5, "5"],
+        [10, "10"],
+        [15, "15"],
+        [30, "30"],
+        [45, "45"],
+        [60, "60"],
+      ],
+      confirm: this._t("save"),
+      onConfirm: (n) =>
+        this._updateZone(setup.entry_id, zone.zone_id, {
+          duration: Math.max(1, Math.min(60, Math.round(n))),
+        }),
+    };
+    this._rebuild();
   }
 
   _closeDialog() {
@@ -2971,31 +3002,20 @@ class GardenIrrigationCard extends HTMLElement {
     }
     el.appendChild(head);
 
-    // Duration slider (always editable)
+    // Duration — opens the same style of picker as the manual "run for…" dialog
     const durRow = document.createElement("div");
     durRow.className = "row";
     durRow.innerHTML = `<span class="label">${this._t("duration")}</span>`;
-    const slider = document.createElement("input");
-    slider.type = "range";
-    slider.min = "1";
-    slider.max = "60";
-    slider.step = "1";
-    slider.value = String(zone.duration);
-    const durVal = document.createElement("span");
-    durVal.className = "dur-value";
-    durVal.textContent = `${zone.duration} min`;
-    slider.addEventListener("input", () => {
-      durVal.textContent = `${slider.value} min`;
-    });
-    slider.addEventListener("change", () =>
-      this._updateZone(setup.entry_id, zone.zone_id, {
-        duration: parseInt(slider.value, 10),
-      })
-    );
-    durRow.append(slider, durVal);
+    const durBtn = document.createElement("button");
+    durBtn.className = "dur-btn";
+    const durText = document.createElement("span");
+    durText.textContent = `${zone.duration} ${this._t("minUnit")}`;
+    durBtn.innerHTML = `<ha-icon icon="mdi:timer-outline"></ha-icon>`;
+    durBtn.appendChild(durText);
+    durBtn.addEventListener("click", () => this._promptDuration(setup, zone));
+    durRow.appendChild(durBtn);
     el.appendChild(durRow);
-    refs.slider = slider;
-    refs.durVal = durVal;
+    refs.durText = durText;
 
     // Cycle & soak (optional — split a run into bursts with soak gaps)
     if (this._edit) {
@@ -3218,10 +3238,7 @@ class GardenIrrigationCard extends HTMLElement {
       }
 
       // edit mode (configuration only — no run/stop, no countdown, no badge)
-      if (this.shadowRoot.activeElement !== refs.slider) {
-        refs.slider.value = String(zone.duration);
-        refs.durVal.textContent = `${zone.duration} min`;
-      }
+      refs.durText.textContent = `${zone.duration} ${this._t("minUnit")}`;
     }
     this._tick();
   }
