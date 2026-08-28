@@ -26,6 +26,7 @@ from .const import (
     CONF_CYCLES,
     CONF_DAYS,
     CONF_DURATION,
+    CONF_ENABLED,
     CONF_FLOW_ENABLED,
     CONF_FLOW_ENTITY,
     CONF_FLOW_MIN,
@@ -568,6 +569,10 @@ class OptionsFlowHandler(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         new_options: dict[str, Any] = {CONF_MODE: self._opts.get(CONF_MODE, DEFAULT_MODE)}
+        # Preserve the pause flag — this flow never edits it, and dropping it
+        # would silently re-enable a disabled setup (missing key = enabled).
+        if CONF_ENABLED in self._opts:
+            new_options[CONF_ENABLED] = self._opts[CONF_ENABLED]
         if new_options[CONF_MODE] == MODE_SEQUENTIAL:
             new_options[CONF_START_TIMES] = self._starts or [
                 {CONF_TIME: DEFAULT_START_TIME, CONF_DAYS: list(WEEKDAYS)}

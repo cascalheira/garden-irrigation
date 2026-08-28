@@ -1054,6 +1054,13 @@ class IrrigationController:
         values = [
             v for v in (self._precip_value(s, domain) for s in series) if v is not None
         ]
+        if not values:
+            _LOGGER.warning(
+                "Rain check for %s: no precipitation value could be read from %s; "
+                "the recent-rain skip cannot trigger",
+                self.entry.title,
+                entity_id,
+            )
         return bool(values) and max(values) >= threshold
 
     @staticmethod
@@ -1088,7 +1095,14 @@ class IrrigationController:
                 blocking=True,
                 return_response=True,
             )
-        except Exception:
+        except Exception as err:  # noqa: BLE001 — treat as "no forecast", but say why
+            _LOGGER.warning(
+                "Rain forecast check for %s: hourly forecast from %s unavailable "
+                "(%s); the forecast skip cannot trigger",
+                self.entry.title,
+                entity_id,
+                err,
+            )
             return False
 
         forecasts = (response or {}).get(entity_id, {}).get("forecast", [])
