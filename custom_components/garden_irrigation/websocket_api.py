@@ -17,6 +17,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
+from .device_sync import get_device_sync
 from .const import (
     CONF_CYCLES,
     CONF_DAYS,
@@ -153,7 +154,14 @@ def _zone_payload(
         "next_run": None,
         "total_minutes": 0,
         "effective_duration": int(data.get(CONF_DURATION, DEFAULT_DURATION)),
+        # Offline-capable relay board this zone's switch belongs to, if any.
+        "device": None,
     }
+    switch = data.get(CONF_SWITCH_ENTITY)
+    if switch:
+        relay = get_device_sync(hass).resolve_relay(switch)
+        if relay:
+            payload["device"] = {"node": relay[0], "relay": relay[1]}
     if controller is not None:
         zone = controller.get_zone(subentry_id)
         if zone is not None:
@@ -186,6 +194,13 @@ def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         for sid, sub in entry.subentries.items()
         if sub.subentry_type == SUBENTRY_TYPE_ZONE
     ]
+    sync = get_device_sync(hass)
+    nodes = {z["device"]["node"] for z in zones if z.get("device")}
+    master = options.get(CONF_MASTER_ENTITY)
+    if master:
+        relay = sync.resolve_relay(master)
+        if relay:
+            nodes.add(relay[0])
     rain_delay_until = None
     if controller is not None and controller.rain_delay_active:
         until = controller.rain_delay_until
@@ -235,6 +250,8 @@ def _setup_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
             if sub.subentry_type == SUBENTRY_TYPE_ZONE
         ),
         "zones": zones,
+        # Status of the offline schedule push per relay board used by this setup.
+        "device_sync": sync.status_for(nodes),
     }
 
 

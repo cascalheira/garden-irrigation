@@ -104,6 +104,9 @@ const STR = {
     yesterday: "Yesterday",
     tomorrow: "Tomorrow",
     nextRun: (t) => `Next: ${t}`,
+    boardRelay: (n) => `relay ${n}`,
+    offlinePlan: (node) => `Offline plan on ${node}`,
+    syncPending: "not sent yet", syncOffline: "board offline", syncCleared: "cleared",
     tabNotify: "Notifications",
     notifyTargets: "Targets",
     notifyNoTargets: "No notify services or entities found.",
@@ -264,6 +267,9 @@ const STR = {
     yesterday: "Ontem",
     tomorrow: "Amanhã",
     nextRun: (t) => `Próxima: ${t}`,
+    boardRelay: (n) => `relé ${n}`,
+    offlinePlan: (node) => `Plano offline em ${node}`,
+    syncPending: "ainda não enviado", syncOffline: "placa offline", syncCleared: "limpo",
     tabNotify: "Notificações",
     notifyTargets: "Destinos",
     notifyNoTargets: "Nenhum serviço ou entidade de notificação encontrado.",
@@ -594,6 +600,9 @@ const STYLES = `
   .vname { font-weight: 650; font-size: 1.05rem; display: flex; align-items: center; gap: 9px; color: var(--primary-text-color); }
   .vmeta { color: var(--secondary-text-color); font-size: .84rem; margin-top: 3px; font-variant-numeric: tabular-nums; }
   .vmeta .dur { color: var(--primary-text-color); font-weight: 600; }
+  .vmeta .dev { display: inline-flex; align-items: center; gap: 3px; }
+  .vmeta .dev ha-icon { --mdc-icon-size: 13px; }
+  .syncline { opacity: .9; }
   .vprogress { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
   .vbar { flex: 1; height: 8px; border-radius: 999px; background: rgba(3,169,244,.16); overflow: hidden; }
   .vbar > i { display: block; height: 100%; width: 0%; background: var(--primary-color); border-radius: 999px; transition: width .5s linear; }
@@ -876,6 +885,7 @@ class GardenIrrigationCard extends HTMLElement {
     if (!this._edit) {
       const season = this._buildSeasonLine(setup);
       if (season) card.appendChild(season);
+      for (const line of this._buildSyncLines(setup)) card.appendChild(line);
     }
     if (this._edit) card.appendChild(this._buildSetupBar(setup));
     if (setup.mode === "sequential") card.appendChild(this._buildSeqBar(setup));
@@ -945,6 +955,27 @@ class GardenIrrigationCard extends HTMLElement {
       `<ha-icon icon="mdi:calendar-sync"></ha-icon>` +
       `<span>${this._escape(this._t("seasonalTitle"))}: <b>${pct}%</b></span>`;
     return div;
+  }
+
+  // One line per relay board that runs this setup's plan when Home Assistant is down.
+  _buildSyncLines(setup) {
+    const out = [];
+    for (const dev of setup.device_sync || []) {
+      const div = document.createElement("div");
+      div.className = "skipwarn syncline";
+      let status = dev.status || "";
+      let icon = "mdi:memory";
+      if (status === "pending") status = this._t("syncPending");
+      else if (status === "device offline") { status = this._t("syncOffline"); icon = "mdi:lan-disconnect"; }
+      else if (status === "cleared") status = this._t("syncCleared");
+      else if (status.startsWith("error")) icon = "mdi:alert-circle-outline";
+      const when = dev.at ? ` · ${this._relTime(dev.at)}` : "";
+      div.innerHTML =
+        `<ha-icon icon="${icon}"></ha-icon>` +
+        `<span>${this._escape(this._t("offlinePlan", dev.node))}: <b>${this._escape(status)}</b>${this._escape(when)}</span>`;
+      out.push(div);
+    }
+    return out;
   }
 
   _promptRainDelay(setup) {
@@ -2806,6 +2837,13 @@ class GardenIrrigationCard extends HTMLElement {
     }
     const extras = [];
     if (zone.cycles > 1) extras.push(`${zone.cycles}×`);
+    if (zone.device && zone.device.relay)
+      extras.push(
+        `<span class="dev" title="${this._escape(zone.device.node)}">` +
+          `<ha-icon icon="mdi:memory"></ha-icon>${this._escape(
+            this._t("boardRelay", zone.device.relay)
+          )}</span>`
+      );
     if (zone.last_watered)
       extras.push(
         `<span class="last">${this._escape(

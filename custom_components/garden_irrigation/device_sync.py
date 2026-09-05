@@ -15,6 +15,7 @@ import asyncio
 import logging
 import re
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.const import (
@@ -61,7 +62,8 @@ class DeviceSync:
         self._unsub_states: CALLBACK_TYPE | None = None
         self._known_devices: set[str] = set()
         self._lock = asyncio.Lock()
-        self.last_result: dict[str, str] = {}
+        # node -> {"status": human readable, "at": ISO timestamp of the attempt}
+        self.last_result: dict[str, dict[str, str]] = {}
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self._on_started)
         hass.bus.async_listen(EVENT_SERVICE_REGISTERED, self._on_service_registered)
 
@@ -194,18 +196,28 @@ class DeviceSync:
                 await self._push(node, plan, rev)
             self._known_devices = set(plans)
 
+    def _record(self, node: str, status: str) -> None:
+        self.last_result[node] = {"status": status, "at": datetime.now(timezone.utc).isoformat()}
+
+    def status_for(self, nodes: set[str]) -> list[dict[str, str]]:
+        """Sync status entries for the card, for the given device nodes."""
+        return [
+            {"node": node, **self.last_result.get(node, {"status": "pending", "at": ""})}
+            for node in sorted(nodes)
+        ]
+
     async def _push(self, node: str, plan: DevicePlan, rev: int) -> None:
         set_svc = self.service_name(node, SERVICE_SET_SCHEDULE)
         clear_svc = self.service_name(node, SERVICE_CLEAR_SCHEDULE)
         if not self.hass.services.has_service(ESPHOME_DOMAIN, set_svc):
-            self.last_result[node] = "device offline"
+            self._record(node, "device offline")
             _LOGGER.debug("Relay device %s not connected; plan will be sent when it appears", node)
             return
         try:
             if plan.block_count() == 0:
                 if self.hass.services.has_service(ESPHOME_DOMAIN, clear_svc):
                     await self.hass.services.async_call(ESPHOME_DOMAIN, clear_svc, {}, blocking=True)
-                self.last_result[node] = "cleared"
+                self._record(node, "cleared")
                 _LOGGER.info("Cleared offline schedule on %s", node)
             else:
                 import json
@@ -214,7 +226,7 @@ class DeviceSync:
                 await self.hass.services.async_call(
                     ESPHOME_DOMAIN, set_svc, {"json": payload}, blocking=True
                 )
-                self.last_result[node] = f"rev {rev & 0xFFFFFFFF}, {plan.block_count()} blocks"
+                self._record(node, f"rev {rev & 0xFFFFFFFF}, {plan.block_count()} blocks")
                 _LOGGER.info(
                     "Sent offline schedule rev %s to %s: %s blocks on relays %s",
                     rev & 0xFFFFFFFF,
@@ -229,7 +241,7 @@ class DeviceSync:
                         "number", "set_value", {"entity_id": entity_id, "value": minutes}, blocking=True
                     )
         except Exception as err:  # noqa: BLE001 - never let a device hiccup break a reload
-            self.last_result[node] = f"error: {err}"
+            self._record(node, f"error: {err}")
             _LOGGER.warning("Could not sync offline schedule to %s: %s", node, err)
 
     @callback
