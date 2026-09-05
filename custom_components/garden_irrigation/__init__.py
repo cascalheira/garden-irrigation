@@ -13,6 +13,7 @@ from homeassistant.loader import async_get_integration
 
 from .const import DOMAIN, PLATFORMS, SERVICE_STOP_ALL
 from .coordinator import IrrigationController
+from .device_sync import get_device_sync
 from .websocket_api import async_register_websocket_commands
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,6 +68,8 @@ async def async_setup_entry(
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     _async_register_services(hass)
+    # Every config change reloads the entry, so this covers all edits plus HA start.
+    get_device_sync(hass).schedule()
 
     return True
 
@@ -80,6 +83,8 @@ async def async_unload_entry(
         await entry.runtime_data.async_shutdown()
         if not _has_other_entries(hass, entry):
             hass.services.async_remove(DOMAIN, SERVICE_STOP_ALL)
+        # A removed or reloading setup must not leave a stale plan on its devices.
+        get_device_sync(hass).schedule()
     return unloaded
 
 

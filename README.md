@@ -73,6 +73,15 @@ and services — no YAML required.
   notified about: valve fails to close (**critical** alert), zone fails to start,
   or watering skipped by rain. A **Send test** button verifies delivery.
   Configured in the card's edit overlay (**Notifications** tab) or setup options.
+- **Offline relay controllers** — zones whose switch belongs to a relay board running the
+  companion [relay6 firmware](https://github.com/cascalheira/esp32-cascalheira) (ESPHome
+  native API, Rust) get their weekly plan pushed to the board automatically, so scheduled
+  watering keeps running if Home Assistant is down. The plan is rebuilt and re-sent on every
+  setup change, on HA start and whenever the board reconnects; while HA is up the board only
+  obeys HA. Cycle & soak, seasonal adjustment and the master valve window are included; rain,
+  freeze, soil and flow logic stay in HA. The board's per-relay **max on time** safeguard is
+  set from the longest scheduled run. No configuration needed: any zone switch that is one of
+  the board's relays is detected from the entity registry.
 - A **Time remaining** sensor per zone, with `next_run` and run metadata exposed as
   attributes.
 - A **dashboard card** with view/edit modes that manages setups, zones and

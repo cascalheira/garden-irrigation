@@ -43,3 +43,18 @@ A single ~3500-line plain custom element (`GardenIrrigationCard`), no framework,
 ### Shared pure helpers — `util.py`
 
 `compute_next_run`, `compute_overlaps` (specific-mode schedule overlaps), and `compute_start_collisions` (sequential start times closer than the total sequence length). Used by the coordinator (which raises HA repair issues `schedule_overlap` / `start_collision`), the config flow (blocking/warning), and the websocket API — overlap/collision behaviour must stay consistent across all three.
+
+### Offline device sync — `plan.py` + `device_sync.py`
+
+Zones whose `switch_entity` is a relay of an ESPHome device exposing `esphome.<node>_set_schedule`
+(the relay6 Rust firmware in `esp32-cascalheira`) get the setup's weekly plan pushed to the device.
+`plan.py` is pure (no HA imports beyond `const`): `build_setup_plans()` turns zones/schedules into
+per-relay minute blocks (`{"days": "MTWTF--", "from": 360, "to": 420}`), splitting at midnight and
+mirroring the coordinator's cycle/soak math; `DevicePlan.safeguards()` derives the per-relay
+max-on-time. `device_sync.py` is a per-hass singleton (`get_device_sync`) that merges plans from
+**all** loaded entries per device and calls the ESPHome action (or `_clear_schedule` when empty),
+then sets the device's `number` max-on-time entities. It is debounced and triggered from
+`async_setup_entry`/`async_unload_entry` (so every reload republishes), HA start, the ESPHome action
+being registered (device connected) and a mapped relay switch leaving `unavailable`. Relay channels
+are parsed from the ESPHome entity unique_id (`...relay_3` / `...Relay 3`). Keep the block format in
+step with `core/src/schedule.rs` in the firmware repo.
